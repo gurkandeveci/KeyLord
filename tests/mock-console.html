@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>KeyLord – sahte vCenter konsolu</title>
+<style>
+  body { font: 14px/1.4 -apple-system, "Segoe UI", sans-serif; margin: 16px; max-width: 760px; }
+  #wmksContainer canvas { width: 320px; height: 60px; background: #111; display: block; }
+  #screen { background: #111; color: #7CFC00; padding: 10px; min-height: 120px; white-space: pre-wrap;
+            font: 13px ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+  code { background: #eee; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>Sahte vCenter konsolu</h1>
+<p>
+  Gerçek vCenter olmadan eklentiyi denemek içindir. VMware'in WMKS bileşenindeki yapıyı taklit eder:
+  jQuery UI bileşeni <code>#wmksContainer</code> üzerinde durur, içinde <code>_vncDecoder.onKeyVScan</code> vardır.
+  Gelen ham tuş kodlarını, aşağıda seçilen "sanal makine klavye düzeni"ne göre ekrana yazar.
+  Adrese <code>?jq=1.12.4&amp;ui=1.11.4</code> ekleyerek eski jQuery sürümleriyle de deneyebilirsiniz.
+</p>
+
+<div class="bar">
+  <label>Sanal makinenin klavye düzeni:
+    <select id="guestLayout">
+      <option value="us">US</option>
+      <option value="trq-windows" selected>Türkçe Q – Windows (ölü tuş: ^ ~ `)</option>
+      <option value="trq-linux">Türkçe Q – Linux masaüstü (ölü tuş: ^)</option>
+      <option value="trq-console">Türkçe Q – ölü tuşsuz</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="connected" checked> Konsol bağlı</label>
+  <button type="button" id="clear">Ekranı temizle</button>
+  <button type="button" id="open">KeyLord kutusunu aç/kapat</button>
+</div>
+
+<div id="wmksContainer"></div>
+<h3>Sanal makine ekranı</h3>
+<div id="screen"></div>
+<p>Basılı kalan tuşlar: <code id="held">yok</code> · Alınan olay sayısı: <code id="events">0</code> · jQuery <code id="versions"></code></p>
+
+<script>
+  var query = new URLSearchParams(location.search);
+  var JQ = query.get('jq') || '3.7.1';
+  var UI = query.get('ui') || '1.13.2';
+  document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/' + JQ + '/jquery.min.js"><\/script>');
+  document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/' + UI + '/jquery-ui.min.js"><\/script>');
+</script>
+
+<script>
+(function () {
+  // ---- Sanal makine: tuş kodlarını seçili düzene göre karaktere çevirir ----
+  // Tablolar eklentideki tablolardan bağımsız, tuş kodu başına elle yazılmıştır (çift kayıt denetimi).
+  var US = {
+    0x29: ['`', '~'], 0x02: ['1', '!'], 0x03: ['2', '@'], 0x04: ['3', '#'], 0x05: ['4', '$'], 0x06: ['5', '%'],
+    0x07: ['6', '^'], 0x08: ['7', '&'], 0x09: ['8', '*'], 0x0a: ['9', '('], 0x0b: ['0', ')'], 0x0c: ['-', '_'],
+    0x0d: ['=', '+'],
+    0x10: ['q', 'Q'], 0x11: ['w', 'W'], 0x12: ['e', 'E'], 0x13: ['r', 'R'], 0x14: ['t', 'T'], 0x15: ['y', 'Y'],
+    0x16: ['u', 'U'], 0x17: ['i', 'I'], 0x18: ['o', 'O'], 0x19: ['p', 'P'], 0x1a: ['[', '{'], 0x1b: [']', '}'],
+    0x1e: ['a', 'A'], 0x1f: ['s', 'S'], 0x20: ['d', 'D'], 0x21: ['f', 'F'], 0x22: ['g', 'G'], 0x23: ['h', 'H'],
+    0x24: ['j', 'J'], 0x25: ['k', 'K'], 0x26: ['l', 'L'], 0x27: [';', ':'], 0x28: ["'", '"'], 0x2b: ['\\', '|'],
+    0x2c: ['z', 'Z'], 0x2d: ['x', 'X'], 0x2e: ['c', 'C'], 0x2f: ['v', 'V'], 0x30: ['b', 'B'], 0x31: ['n', 'N'],
+    0x32: ['m', 'M'], 0x33: [',', '<'], 0x34: ['.', '>'], 0x35: ['/', '?'], 0x39: [' ', ' ']
+  };
+  var TRQ = {
+    0x29: ['"', 'é', '<'], 0x02: ['1', '!', '>'], 0x03: ['2', "'", '£'], 0x04: ['3', '^', '#'],
+    0x05: ['4', '+', '$'], 0x06: ['5', '%', '½'], 0x07: ['6', '&'], 0x08: ['7', '/', '{'], 0x09: ['8', '(', '['],
+    0x0a: ['9', ')', ']'], 0x0b: ['0', '=', '}'], 0x0c: ['*', '?', '\\'], 0x0d: ['-', '_', '|'],
+    0x10: ['q', 'Q', '@'], 0x11: ['w', 'W'], 0x12: ['e', 'E', '€'], 0x13: ['r', 'R'], 0x14: ['t', 'T'],
+    0x15: ['y', 'Y'], 0x16: ['u', 'U'], 0x17: ['ı', 'I'], 0x18: ['o', 'O'], 0x19: ['p', 'P'], 0x1a: ['ğ', 'Ğ'],
+    0x1b: ['ü', 'Ü', '~'],
+    0x1e: ['a', 'A'], 0x1f: ['s', 'S'], 0x20: ['d', 'D'], 0x21: ['f', 'F'], 0x22: ['g', 'G'], 0x23: ['h', 'H'],
+    0x24: ['j', 'J'], 0x25: ['k', 'K'], 0x26: ['l', 'L'], 0x27: ['ş', 'Ş'], 0x28: ['i', 'İ'], 0x2b: [',', ';', '`'],
+    0x56: ['<', '>', '|'], 0x2c: ['z', 'Z'], 0x2d: ['x', 'X'], 0x2e: ['c', 'C'], 0x2f: ['v', 'V'], 0x30: ['b', 'B'],
+    0x31: ['n', 'N'], 0x32: ['m', 'M'], 0x33: ['ö', 'Ö'], 0x34: ['ç', 'Ç'], 0x35: ['.', ':'], 0x39: [' ', ' ', ' ']
+  };
+  var GUESTS = {
+    'us': { table: US, dead: '' },
+    'trq-windows': { table: TRQ, dead: '^~`' },
+    'trq-linux': { table: TRQ, dead: '^' },
+    'trq-console': { table: TRQ, dead: '' }
+  };
+  var NAMES = { 0x2a: 'Shift', 0x36: 'Shift(sağ)', 0x138: 'AltGr', 0x1d: 'Ctrl', 0x38: 'Alt' };
+
+  var screen = document.getElementById('screen');
+  var held = [];
+  var pendingDead = null;
+  var events = 0;
+
+  function type(text) { screen.textContent += text; }
+
+  function receiveKey(scan, down) {
+    events++;
+    document.getElementById('events').textContent = events;
+    if (down) { if (held.indexOf(scan) === -1) held.push(scan); }
+    else { held = held.filter(function (s) { return s !== scan; }); }
+    document.getElementById('held').textContent =
+      held.length ? held.map(function (s) { return NAMES[s] || '0x' + s.toString(16); }).join(' + ') : 'yok';
+    if (!down || NAMES[scan]) return;
+
+    var ctrl = held.indexOf(0x1d) !== -1, alt = held.indexOf(0x38) !== -1;
+    if (scan === 0x153 && ctrl && alt) return type('[Ctrl+Alt+Del]');
+    if (scan === 0x1c) return type('\n');
+    if (scan === 0x0f) return type('[Tab]');
+    if (scan === 0x01) return type('[Esc]');
+
+    var guest = GUESTS[document.getElementById('guestLayout').value];
+    var level = held.indexOf(0x138) !== -1 ? 2 : held.indexOf(0x2a) !== -1 ? 1 : 0;
+    var ch = (guest.table[scan] || [])[level];
+    if (ch === undefined) return type('[?0x' + scan.toString(16) + ']');
+
+    if (pendingDead !== null) {
+      // Ölü tuştan sonra boşluk gelirse karakter tek başına yazılır; başka tuş gelirse birleşir.
+      type(ch === ' ' ? pendingDead : '[' + pendingDead + '+' + ch + ']');
+      pendingDead = null;
+    } else if (guest.dead.indexOf(ch) !== -1) {
+      pendingDead = ch;
+    } else {
+      type(ch);
+    }
+  }
+
+  // ---- WMKS taklidi (VMware HTML Console SDK ile aynı yapı ve adlar) ----
+  function FakeDecoder() { this._serverInitialized = true; }
+  FakeDecoder.prototype.onKeyVScan = function (a, b) {
+    if (this._serverInitialized) {
+      this._sendBytes([127, 0, 0, 8, (a >> 8) & 255, a & 255, b ? 1 : 0, 0]);
+    }
+  };
+  FakeDecoder.prototype._sendBytes = function (bytes) {
+    receiveKey((bytes[4] << 8) | bytes[5], bytes[6]);
+  };
+
+  $.widget('wmks.wmks', {
+    _create: function () {
+      this._canvas = $('<canvas>').prop({ id: 'mainCanvas', tabindex: 1 });
+      this.element.addClass('wmks').append(this._canvas);
+      this._vncDecoder = new FakeDecoder();
+    }
+  });
+  $.widget('wmks.nwmks', $.wmks.wmks, { options: {} });
+
+  var container = $('#wmksContainer').nwmks({});
+  var widget = container.data('nwmks') || container.data('wmks-nwmks');
+
+  document.getElementById('versions').textContent = $.fn.jquery + ' / UI ' + $.ui.version;
+  document.getElementById('connected').addEventListener('change', function (e) {
+    widget._vncDecoder._serverInitialized = e.target.checked;
+  });
+  document.getElementById('clear').addEventListener('click', function () {
+    screen.textContent = '';
+    pendingDead = null;
+  });
+  document.getElementById('open').addEventListener('click', function () { window.__keyLordDialog.toggle(); });
+})();
+</script>
+
+<!-- Eklenti betikleri. Gerçek eklentide engine.js sayfa dünyasında, diğerleri yalıtılmış dünyada çalışır;
+     burada hepsi aynı sayfada yüklenir ve chrome.storage basit bir taklitle karşılanır. -->
+<script>
+  window.chrome = window.chrome || {};
+  if (!chrome.storage) {
+    chrome.storage = { local: {
+      _data: {},
+      get: function (key) { var out = {}; out[key] = this._data[key]; return Promise.resolve(out); },
+      set: function (items) { Object.assign(this._data, items); return Promise.resolve(); }
+    } };
+  }
+</script>
+<script src="../src/engine.js"></script>
+<script src="../src/layouts.js"></script>
+<script src="../src/dialog.js"></script>
+</body>
+</html>
