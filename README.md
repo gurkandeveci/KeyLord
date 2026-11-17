@@ -88,7 +88,11 @@ Ardından `http://localhost:8765/tests/mock-console.html` adresini açın. Sayfa
 Arkadaşlarınıza göndermek için yalnızca çalışma dosyalarını paketleyin:
 
 ```bash
-zip -r KeyLord.zip manifest.json background.js src icons README.md
+zip -r KeyLord.zip manifest.json background.js src icons README.md LICENSE
 ```
 
 Simgeleri yeniden üretmek için: `python3 tools/make_icons.py`
+
+## Lisans
+
+[MIT](LICENSE) © 2026 Gürkan Deveci
