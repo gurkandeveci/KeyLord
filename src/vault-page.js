@@ -23,7 +23,8 @@
     'wrong-password': 'Ana parola yanlış.',
     'backup-wrong-password': 'Yedeğin ana parolası yanlış.',
     'not-a-backup': 'Bu dosya bir KeyLord yedeği değil.',
-    'bad-envelope': 'Yedekteki bazı kayıtlar bozuk; geri yükleme yapılmadı.'
+    'bad-envelope': 'Yedekteki bazı kayıtlar bozuk; geri yükleme yapılmadı.',
+    'bad-header': 'Kasa başlığı bozuk veya değiştirilmiş.'
   };
 
   // --- Yalnızca test sayfasında (uzantı dışında) geçerli parametreler ---
@@ -38,6 +39,9 @@
   }
   var iterationsParam = testParam('iterations');
   var ITERATIONS = iterationsParam > 0 ? iterationsParam : C.DEFAULT_ITERATIONS;
+  // Kilit açmada tur alt sınırı: uzantıda her zaman varsayılan (undefined); yalnızca test sayfasında düşürülür.
+  var UNLOCK_OPTS = iterationsParam > 0 ? { minIterations: iterationsParam } : undefined;
+  var SETUP_POLL_MS = 5000; // kurulum ekranında başka cihazdan eşitlenen kasayı bekleme aralığı
   var timeoutParam = testParam('timeout');
   var IDLE_MS = timeoutParam > 0 ? timeoutParam : S.TIMEOUT_MS;
   // Test zaman aşımı: TIMEOUT_MS sabit olduğundan saat hızlandırılır (kayıt ve okuma aynı saati kullanır).
@@ -67,7 +71,9 @@
     showPassword: false,
     shotUrl: null,
     detailToken: 0,
-    busy: false
+    busy: false,
+    orphans: [], // [{ vid, header, records: [{ id, envelope }] }] – başka (eski) kasanın anahtarıyla yazılmış kayıtlar
+    setupPoll: null
   };
 
   // ---------- DOM yardımcıları ----------
@@ -189,9 +195,19 @@
     state.selectedId = null;
     state.showPassword = false;
     state.query = '';
+    state.orphans = [];
     state.detailToken++;
+    stopSetupPoll();
     if (ui.list) clear(ui.list);
     if (ui.detail) clear(ui.detail);
+    if (ui.orphans) clear(ui.orphans);
+  }
+
+  function stopSetupPoll() {
+    if (state.setupPoll) {
+      clearInterval(state.setupPoll);
+      state.setupPoll = null;
+    }
   }
 
   function lockUi(message) {
@@ -245,6 +261,31 @@
     var form = el('form', { id: 'setup-form', autocomplete: 'off' }, [p1.node, p2.node, submit, msg]);
     var restore = buildRestorePanel(false);
     restore.node.hidden = true;
+    var setupWarning = el('div', {
+      id: 'setup-warning',
+      class: 'notice',
+      role: 'note',
+      text: 'Ana parolayı unutursanız kayıtlar geri getirilemez. Düzenli yedek alın.'
+    });
+
+    // Google hesabı varsa: başka bilgisayardaki kasa eşitlenmeden ikinci kasa kurulmasın diye uyar ve bekle.
+    var gen = state.gen;
+    getEmail().then(function (email) {
+      if (!email || gen !== state.gen || state.screen !== 'setup') return;
+      setupWarning.parentNode.insertBefore(
+        el('div', {
+          id: 'setup-other-device',
+          class: 'notice',
+          role: 'alert',
+          text:
+            'Bu Google hesabıyla başka bir bilgisayarda KeyLord kullanıyorsanız yeni kasa kurmayın: ' +
+            'eşitlemenin gelmesini bekleyin (birkaç dakika) ya da yedekten yükleyin.'
+        }),
+        setupWarning
+      );
+      stopSetupPoll();
+      state.setupPoll = setInterval(pollForHeader, SETUP_POLL_MS);
+    });
 
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -302,12 +343,7 @@
             'Şifre geçmişiniz bu ana parolayla şifrelenir. Ana parola hiçbir yerde saklanmaz; ' +
             'kayıtları görmek için bu sayfada sorulur.'
         }),
-        el('div', {
-          id: 'setup-warning',
-          class: 'notice',
-          role: 'note',
-          text: 'Ana parolayı unutursanız kayıtlar geri getirilemez. Düzenli yedek alın.'
-        }),
+        setupWarning,
         form,
         el('div', { class: 'divider', text: 'veya' }),
         el('p', { class: 'muted small', text: 'Daha önce aldığınız bir KeyLord yedeğiniz varsa kasayı ondan kurun.' }),
@@ -316,6 +352,20 @@
       ])
     ]);
     p1.input.focus();
+  }
+
+  // Kurulum ekranı açıkken başka cihazdan kasa başlığı eşitlenirse kilit ekranına geçer.
+  async function pollForHeader() {
+    if (state.screen !== 'setup' || state.busy) return;
+    var gen = state.gen;
+    var header = null;
+    try {
+      header = await store.getHeader();
+    } catch (e) {
+      header = null;
+    }
+    if (!header || gen !== state.gen || state.screen !== 'setup' || state.busy) return;
+    showUnlock('Başka bilgisayardaki kasanız eşitlendi. Ana parolanızla kilidi açın.');
   }
 
   // ---------- Kilit ----------
@@ -350,9 +400,10 @@
         }
         var key;
         try {
-          key = await C.unlockVault(header, pw);
+          key = await C.unlockVault(header, pw, UNLOCK_OPTS);
         } catch (e) {
-          setMsg(msg, errorCode(e) === 'wrong-password' ? ERRORS['wrong-password'] : 'Kasa açılamadı.', 'error');
+          var code = errorCode(e);
+          setMsg(msg, code === 'wrong-password' || code === 'bad-header' ? ERRORS[code] : 'Kasa açılamadı.', 'error');
           p.input.focus();
           return;
         } finally {
@@ -417,6 +468,7 @@
     });
 
     ui.warnings = el('div', { id: 'warnings', class: 'warnings', 'aria-live': 'polite' });
+    ui.orphans = el('div', { id: 'orphans', class: 'warnings' });
     ui.syncHint = el('p', { id: 'sync-hint', class: 'muted small', hidden: true });
     ui.count = el('span', { id: 'record-count', class: 'muted small' });
     ui.list = el('ul', { id: 'record-list', class: 'list' });
@@ -432,41 +484,171 @@
     ]);
     ui.search = search;
 
-    mount(actions, [ui.warnings, restore.node, ui.grid, ui.syncHint]);
+    mount(actions, [ui.warnings, ui.orphans, restore.node, ui.grid, ui.syncHint]);
     ui.restore = restore;
     await refreshData(key);
   }
 
   // Kayıtları depodan okuyup çözer, uyarıları ve listeyi yeniler.
+  // Bu kasanın anahtarıyla çözülemeyen kayıtlar zarftaki kasa kimliğine (vid) göre gruplanır;
+  // o kimliğin başlığı biliniyorsa "Eski kasayı aç" ile bu kasaya taşınabilir.
+  // Depo okunamazsa liste alanında hata gösterir ve false döner.
   async function refreshData(key) {
     var gen = state.gen;
+    var header, out, bad, orphans;
     try {
-      await store.retryPending();
-    } catch (e) {}
-    var header = await store.getHeader();
-    var list = await store.listRecords();
-    var out = [];
-    var bad = 0;
-    for (var i = 0; i < list.length; i++) {
       try {
-        out.push({ id: list[i].id, rec: await C.decryptJson(key, list[i].envelope), synced: list[i].synced });
-      } catch (e) {
-        bad++;
+        await store.retryPending();
+      } catch (e) {}
+      header = await store.getHeader();
+      var list = await store.listRecords();
+      var known = {};
+      try {
+        (await store.listHeaders()).forEach(function (h) {
+          known[h.vaultId] = h;
+        });
+      } catch (e) {}
+      var currentId = header && header.vaultId;
+      var groups = {};
+      out = [];
+      bad = 0;
+      for (var i = 0; i < list.length; i++) {
+        try {
+          out.push({ id: list[i].id, rec: await C.decryptJson(key, list[i].envelope), synced: list[i].synced });
+        } catch (e) {
+          var env = list[i].envelope;
+          var vid = env && typeof env.vid === 'string' ? env.vid : '';
+          if (vid && vid !== currentId && Object.prototype.hasOwnProperty.call(known, vid)) {
+            if (!groups[vid]) groups[vid] = { vid: vid, header: known[vid], records: [] };
+            groups[vid].records.push({ id: list[i].id, envelope: env });
+          } else {
+            bad++;
+          }
+        }
       }
+      orphans = Object.keys(groups).sort().map(function (v) {
+        return groups[v];
+      });
+    } catch (e) {
+      if (gen !== state.gen || state.screen !== 'main') return false;
+      showListError();
+      return false;
     }
-    if (gen !== state.gen || state.screen !== 'main') return; // bu arada kilitlendi
+    if (gen !== state.gen || state.screen !== 'main') return false; // bu arada kilitlendi
     out.sort(function (a, b) {
       return (Number(b.rec.createdAt) || 0) - (Number(a.rec.createdAt) || 0);
     });
     state.header = header;
     state.records = out;
     state.bad = bad;
+    state.orphans = orphans;
     state.pending = out.filter(function (r) {
       return !r.synced;
     }).length;
     renderList();
+    renderOrphans();
     if (state.selectedId && !findRecord(state.selectedId)) closeDetail();
     await renderWarnings();
+    return true;
+  }
+
+  // Depo okunamadı: liste alanında takılı "Yükleniyor…" yerine hata gösterilir.
+  function showListError() {
+    if (!ui.list) return;
+    clear(ui.list);
+    ui.count.textContent = '';
+    ui.empty.hidden = false;
+    ui.empty.className = 'msg error';
+    ui.empty.textContent = 'Kayıtlar okunamadı. Sayfayı yenileyin.';
+  }
+
+  // Eski kasa grupları: her biri için ana parola alanı ve "Eski kasayı aç".
+  function renderOrphans() {
+    if (!ui.orphans) return;
+    clear(ui.orphans);
+    state.orphans.forEach(function (group, idx) {
+      var fieldId = 'orphan-password-' + idx;
+      var input = el('input', { id: fieldId, type: 'password', autocomplete: 'off', spellcheck: 'false' });
+      var msg = el('div', { class: 'msg', role: 'status' });
+      var run = el('button', { type: 'submit', class: 'btn primary', text: 'Eski kasayı aç' });
+      var form = el('form', { class: 'orphan-form', autocomplete: 'off' }, [
+        el('label', { class: 'lbl', for: fieldId }, ['Eski kasanın ana parolası', input]),
+        el('div', { class: 'actions' }, [run]),
+        msg
+      ]);
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        if (state.busy) return;
+        var pw = input.value;
+        input.value = '';
+        if (!pw) {
+          setMsg(msg, 'Eski kasanın ana parolasını girin.', 'error');
+          return;
+        }
+        state.busy = true;
+        run.disabled = true;
+        setMsg(msg, 'Eski kasa açılıyor…');
+        try {
+          await migrateOrphans(group, pw, msg);
+        } finally {
+          pw = '';
+          state.busy = false;
+          run.disabled = false;
+        }
+      });
+      ui.orphans.appendChild(
+        el('section', { class: 'notice orphan', role: 'alert', 'data-vid': group.vid }, [
+          el('div', {
+            class: 'orphan-title',
+            text:
+              'Eski kasadan ' + group.records.length + ' kayıt var. Bu kayıtlar başka bir kasanın anahtarıyla ' +
+              'yazılmış (ör. başka bilgisayarda kurulan kasa). O kasanın ana parolasıyla açıp bu kasaya taşıyın.'
+          }),
+          form
+        ])
+      );
+    });
+  }
+
+  // Eski kasanın kayıtlarını (ve görüntülerini) çözüp geçerli kasaya yeniden şifreler ve yazar.
+  async function migrateOrphans(group, pw, msg) {
+    var key = await requireKey();
+    if (!key) return;
+    var gen = state.gen;
+    var oldKey;
+    try {
+      oldKey = await C.unlockVault(group.header, pw, UNLOCK_OPTS);
+    } catch (e) {
+      var code = errorCode(e);
+      setMsg(msg, code === 'wrong-password' || code === 'bad-header' ? ERRORS[code] : 'Eski kasa açılamadı.', 'error');
+      return;
+    } finally {
+      pw = '';
+    }
+    try {
+      var current = await store.getHeader();
+      if (!current) throw new Error('no-vault');
+      var shots = {};
+      for (var i = 0; i < group.records.length; i++) {
+        var id = group.records[i].id;
+        var shot = await store.getShot(id);
+        if (shot && shot.vid === group.vid) shots[id] = shot;
+      }
+      var res = await B.reencrypt(oldKey, current, group.records, shots);
+      if (gen !== state.gen || state.screen !== 'main') return; // bu arada kilitlendi
+      for (var j = 0; j < res.records.length; j++) await store.putRecord(res.records[j].id, res.records[j].envelope);
+      for (var sid in res.shots) {
+        if (Object.prototype.hasOwnProperty.call(res.shots, sid)) await store.putShot(sid, res.shots[sid]);
+      }
+    } catch (e) {
+      setMsg(msg, 'Eski kasanın kayıtları taşınamadı.', 'error');
+      return;
+    }
+    oldKey = null;
+    var k = await requireKey();
+    if (!k) return;
+    await refreshData(k);
+    toast(group.records.length + ' kayıt eski kasadan bu kasaya taşındı.');
   }
 
   function findRecord(id) {
@@ -533,14 +715,14 @@
         'button',
         {
           type: 'button',
-          class: 'row' + (rec.status === 'failed' ? ' failed' : '') + (r.id === state.selectedId ? ' selected' : ''),
+          class: 'row' + (R.bestStatus(rec) === 'failed' ? ' failed' : '') + (r.id === state.selectedId ? ' selected' : ''),
           'data-id': r.id
         },
         [
           el('span', { class: 'date', text: formatDate(rec.createdAt) }),
           el('span', { class: 'host', text: text(rec.host) }),
           el('span', { class: 'user', text: text(rec.username) }),
-          el('span', { class: 'badge' + (r.synced ? '' : ' unsynced'), text: statusLabel(rec.status) })
+          el('span', { class: 'badge' + (r.synced ? '' : ' unsynced'), text: statusLabel(R.bestStatus(rec)) })
         ]
       );
       row.addEventListener('click', function () {
@@ -551,6 +733,7 @@
     var total = state.records.length;
     ui.count.textContent = q ? shown.length + ' / ' + total + ' kayıt' : total + ' kayıt';
     ui.empty.hidden = shown.length > 0;
+    ui.empty.className = 'muted';
     ui.empty.textContent = total === 0 ? 'Henüz kayıt yok.' : 'Eşleşen kayıt yok.';
   }
 
@@ -599,7 +782,7 @@
       kv('Kullanıcı adı', el('span', { id: 'detail-username', text: text(rec.username) })),
       kv('Şifre', el('div', null, [pwNode, el('div', { class: 'actions under' }, [showBtn, copyBtn])])),
       kv('Yöntem', el('span', { id: 'detail-method', text: methodLabel(rec.method) })),
-      kv('Durum', el('span', { id: 'detail-status', text: statusLabel(rec.status) })),
+      kv('Durum', el('span', { id: 'detail-status', text: statusLabel(R.bestStatus(rec)) })),
       kv('Eşitleme', el('span', { id: 'detail-sync', text: r.synced ? 'Eşitlendi' : 'Bu bilgisayarda bekliyor' }))
     ].forEach(function (pair) {
       dl.appendChild(pair[0]);
@@ -712,8 +895,8 @@
   async function onRefresh() {
     var key = await requireKey();
     if (!key) return;
-    await refreshData(key);
-    toast('Liste yenilendi.');
+    if (await refreshData(key)) toast('Liste yenilendi.');
+    else if (state.screen === 'main') toast('Kayıtlar okunamadı.', true);
   }
 
   async function onLockNow() {
@@ -837,13 +1020,14 @@
       res = await B.restoreBackup({
         backup: backup,
         backupPassword: pw,
+        unlockOptions: UNLOCK_OPTS,
         currentHeader: currentHeader,
         currentPrivateKey: currentKey
       });
     } catch (e) {
       var code = errorCode(e);
       if (code === 'wrong-password') setMsg(msg, ERRORS['backup-wrong-password'], 'error');
-      else if (code === 'bad-envelope' || code === 'not-a-backup') setMsg(msg, ERRORS[code], 'error');
+      else if (code === 'bad-envelope' || code === 'not-a-backup' || code === 'bad-header') setMsg(msg, ERRORS[code], 'error');
       else setMsg(msg, 'Yedek yüklenemedi.', 'error');
       return;
     }
@@ -862,7 +1046,7 @@
       // Yeni benimsenen kasa yedeğin parolasıyla açılır (parola doğrulandı).
       var key;
       try {
-        key = await C.unlockVault(res.header, pw);
+        key = await C.unlockVault(res.header, pw, UNLOCK_OPTS);
       } catch (e) {
         showUnlock('Yedek yüklendi. Yedeğin ana parolasıyla kilidi açın.');
         return;
