@@ -7,7 +7,11 @@ ana parolayla korunan şifreli bir kasaya kaydeder. Windows ve macOS'ta Chrome i
 
 ## Kurulum
 
-1. Bu klasörü bilgisayarınıza kopyalayın (zip olarak aldıysanız bir klasöre açın).
+1. Bu klasörü bilgisayarınıza kopyalayın (zip olarak aldıysanız bir klasöre açın). **Kalıcı bir yer seçin**
+   (örn. `~/Applications/KeyLord` veya `C:\Araclar\KeyLord`); İndirilenler, masaüstü gibi temizlenen yerleri ya da
+   zip'in önizleme penceresini kullanmayın. Chrome açılışta klasörü bulamazsa eklentiyi listeden kaldırır ve her
+   açılışta yeniden yüklemeniz gerekir. Yükledikten sonra klasörü taşımayın ve silmeyin; güncellerken yeni zip'i
+   aynı klasörün üzerine açın.
 2. Chrome'da `chrome://extensions` adresini açın.
 3. Sağ üstteki **Geliştirici modu** anahtarını açın.
 4. **Paketlenmemiş öğe yükle**'ye basıp bu klasörü (içinde `manifest.json` olan) seçin.
