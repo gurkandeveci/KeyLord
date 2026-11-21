@@ -124,6 +124,11 @@ sınırlıdır: yaklaşık **150–200 kayıt**; %80'e gelince Kasa sayfası uya
 saklanır ve sonra yeniden denenir, "N kayıt eşitlenmedi" diye gösterilir; hiçbir kayıt sessizce silinmez.
 **Ekran görüntüleri eşitlenmez**, yalnızca bu bilgisayarda kalır.
 
+**Her kişinin kasası kendinedir.** Kayıtlar, Chrome'da oturum açılmış **kendi Google hesabınıza** eşitlenir;
+eklentiyi kullanan başka biriyle (aynı zip'i kurmuş olsa bile) hiçbir zaman paylaşılmaz. Her kasa ayrıca ayrı
+bir ana parolayla şifrelidir. Eşitleme yalnızca **aynı kişinin kendi bilgisayarları** arasında olur (örneğin iş
+ve ev bilgisayarınız, ikisinde de aynı Google hesabıyla oturum açıksa).
+
 **Birden çok bilgisayar: ikinci kasa kurmayın.** Kasayı yalnızca bir kez, ilk bilgisayarda kurun. Başka bir
 bilgisayarda Kasa sayfası "Kasayı kur" ekranını gösteriyorsa yeni kasa kurmayın: kasanın eşitlenmesini bekleyin
 (birkaç dakika; sayfa her 5 saniyede bir kontrol eder ve kasa gelince kendiliğinden kilit ekranına geçer) ya da
@@ -198,13 +203,23 @@ Tüm sitelere erişim (host izni) istenmez.
 ## Eklenti kimliği ve `key.pem`
 
 `manifest.json` içindeki `key` alanı eklentiye sabit bir kimlik verir: **`lnkkedffjgecpfahibmnlhimadopejcd`**.
-Böylece zip ile kurulan her bilgisayarda kimlik aynıdır ve `storage.sync` verisi ortak olur (eşitleme eklenti
-kimliğine bağlıdır).
+Chrome kimliği bu açık anahtardan hesaplar; bu yüzden dosyaları GitHub'dan ya da zip'ten olduğu gibi indirip
+"Paketlenmemiş öğe yükle" ile kuran **herkeste kimlik otomatik olarak aynıdır**.
 
-- Bu kimliğin gizli anahtarı **`key.pem`** dosyasıdır. **Gizlidir, repoya girmez** (`.gitignore`'dadır).
-  **Güvenli bir yere yedekleyin** (parola yöneticisi, şifreli disk); kaybederseniz aynı kimlik yeniden üretilemez.
-- `tools/make_key.sh` yeni bir anahtar çifti üretir ve `manifest.json`'a konacak açık anahtarı ile kimliği
-  yazdırır. `key.pem` zaten varsa **üzerine yazmaz**, hata verip durur.
+Kimlik, **aynı kişinin kendi bilgisayarları** arasındaki eşitleme için önemlidir: eşitleme Google hesabına ve
+eklenti kimliğine bağlıdır. Bir kişinin iki bilgisayarındaki KeyLord'un kimliği aynıysa kayıtları iki bilgisayar
+arasında eşitlenir; farklıysa Chrome bunları iki ayrı eklenti sayar ve kayıtlar eşitlenmez. Farklı kişilerin
+kayıtları ise kimlik ne olursa olsun birbirine karışmaz (bkz. [Eşitleme](#eşitleme)).
+
+- **Eklentiyi kullananların `key.pem`'e ihtiyacı yoktur** ve bu dosya otomatik oluşmaz; gerekmez de. Normal
+  kullanım için `manifest.json`'daki açık anahtar yeterlidir.
+- **`key.pem`** bu kimliğin gizli anahtarıdır ve **yalnızca projenin sahibinde** durur. **Gizlidir, repoya
+  girmez** (`.gitignore`'dadır). Yalnızca Chrome Web Mağazası'na yüklerken veya `.crx` paketlerken kimliği
+  korumak için gerekir. **Güvenli bir yere yedekleyin** (parola yöneticisi, şifreli disk); kaybedilirse aynı
+  kimlik yeniden üretilemez.
+- **`tools/make_key.sh` yalnızca proje sahibi içindir; kullanıcılar çalıştırmamalıdır.** Yeni ve farklı bir
+  anahtar çifti üretir; bu anahtar `manifest.json`'a yazılırsa o kurulumun kimliği değişir ve kişinin kendi
+  bilgisayarları arasındaki eşitleme bozulur. `key.pem` zaten varsa **üzerine yazmaz**, hata verip durur.
 - Kimlik değişirse eski kimliğin eşitlenmiş verisine yenisi erişemez; kurtarma yolu yedektir (aşağıda).
 
 ## Chrome Web Mağazası'na geçiş
