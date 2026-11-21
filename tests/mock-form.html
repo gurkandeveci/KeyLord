@@ -30,6 +30,11 @@
   <label>Salt okunur şifre <input id="b-readonly" type="password" name="ro" readonly></label>
 </form>
 
+<p>
+  <button type="button" id="open">KeyLord kutusunu aç/kapat</button>
+  · Odağı şifre alanında tutarak açmak için alana tıklayıp <code>Alt+Shift+K</code>.
+</p>
+
 <h3>Olay sayıları</h3>
 <code id="events">-</code>
 <h3>Değerler (uzunluk)</h3>
@@ -55,6 +60,25 @@
     });
   });
   render();
+  document.getElementById('open').addEventListener('click', function () { window.__keyLordDialog.toggle(); });
+  // Gerçek eklentideki kısayol gibi: odak sayfadaki alanda kalırken kutuyu aç.
+  document.addEventListener('keydown', function (e) {
+    if (e.altKey && e.shiftKey && e.code === 'KeyK') {
+      e.preventDefault();
+      window.__keyLordDialog.toggle();
+    }
+  });
 </script>
+
+<!-- KeyLord kutusu (tests/mock-console.html ile aynı düzen). Kasa kurmak için konsolda:
+     await __shim.createVault('test-parola-123', { iterations: 1000 }); kayıtlar: await __shim.records() -->
+<script src="chrome-shim.js"></script>
+<script src="../src/vault-crypto.js"></script>
+<script src="../src/store.js"></script>
+<script src="../src/engine.js"></script>
+<script src="../src/layouts.js"></script>
+<script src="../src/generator.js"></script>
+<script src="../src/records.js"></script>
+<script src="../src/dialog.js"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ importScripts('src/vault-crypto.js', 'src/store.js');
 // kutusunu ekler. Yalnızca activeTab izni kullanılır: eklenti, siz düğmeye basmadıkça hiçbir sayfaya erişmez.
 
 const ENGINE_FILE = 'src/engine.js';
-const DIALOG_FILES = ['src/layouts.js', 'src/dialog.js'];
+const DIALOG_FILES = ['src/layouts.js', 'src/generator.js', 'src/records.js', 'src/fieldfill.js', 'src/dialog.js'];
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return;

@@ -1,12 +1,17 @@
 // "KeyLord" kutusu. Eklentinin yalıtılmış dünyasında çalışır; metni tuş vuruşlarına çevirir
 // (layouts.js) ve sayfa dünyasındaki motora (engine.js) CustomEvent ile iletir.
-// Yazılan metin hiçbir yere kaydedilmez; yalnızca gönderim ayarları saklanır.
+// Konsol sekmesinde yazılan metin hiçbir yere kaydedilmez; yalnızca gönderim ayarları saklanır.
+// Şifre sekmesinde üretilen şifre, gönderilmeden/kopyalanmadan ÖNCE arka plana (service worker)
+// kaydettirilir; arka plan onu kasanın açık anahtarıyla şifreler. Kayıt yazılamazsa hiçbir şey gönderilmez.
 (function () {
   'use strict';
 
   if (window.__keyLordDialog) return;
 
   var L = globalThis.KeyLordLayouts;
+  var G = globalThis.KeyLordGenerator;
+  var R = globalThis.KeyLordRecords;
+  var F = globalThis.KeyLordFieldFill;
 
   // strokeDelay: karakterler arası bekleme; eventGap: tek karakterin bas/bırak adımları arası bekleme (ms)
   var SPEEDS = {
@@ -22,7 +27,9 @@
     speed: 'normal',
     appendEnter: false,
     clearAfter: true,
-    hideText: false
+    hideText: false,
+    tab: 'console' // 'console' | 'password'
+    // gen: üretici ayarları (KeyLordGenerator.DEFAULTS üzerine birleştirilir)
   };
 
   var ERRORS = {
@@ -33,16 +40,25 @@
     'send-failed': 'Gönderim sırasında hata oluştu'
   };
 
+  var FILL_ERROR = 'Doldurulacak boş şifre alanı bulunamadı. Alana tıklayıp tekrar deneyin.';
+
   var CSS = [
     ':host { all: initial; }',
     '.panel { --bg:#ffffff; --fg:#1b1f24; --muted:#5c6570; --line:#d5dae0; --field:#f6f8fa;',
-    '  --accent:#0b62d6; --accent-fg:#ffffff; --ok:#1a7f37; --err:#c62828;',
-    '  box-sizing:border-box; width:360px; max-width:calc(100vw - 16px); background:var(--bg); color:var(--fg);',
-    '  border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 32px rgba(0,0,0,.28);',
+    '  --accent:#0b62d6; --accent-fg:#ffffff; --ok:#1a7f37; --err:#c62828; --sel:#e3edfb;',
+    '  box-sizing:border-box; display:flex; width:400px; max-width:calc(100vw - 16px); background:var(--bg);',
+    '  color:var(--fg); border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 32px rgba(0,0,0,.28);',
     '  font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; overflow:hidden; }',
     '@media (prefers-color-scheme: dark) { .panel { --bg:#1f2329; --fg:#e7eaee; --muted:#9aa4af; --line:#3a414a;',
-    '  --field:#2a3038; --accent:#4c9aff; --accent-fg:#0b1220; --ok:#56d364; --err:#ff7b72; } }',
+    '  --field:#2a3038; --accent:#4c9aff; --accent-fg:#0b1220; --ok:#56d364; --err:#ff7b72; --sel:#26354a; } }',
     '.panel * { box-sizing:border-box; font:inherit; color:inherit; }',
+    '.rail { flex:0 0 auto; display:flex; flex-direction:column; gap:4px; padding:8px 4px;',
+    '  border-right:1px solid var(--line); background:var(--field); }',
+    'button.tab { width:34px; height:34px; border:1px solid transparent; border-radius:8px; background:transparent;',
+    '  cursor:pointer; font-size:17px; line-height:1; padding:0; }',
+    'button.tab:hover { border-color:var(--line); background:var(--bg); }',
+    'button.tab.selected { background:var(--sel); border-color:var(--accent); }',
+    '.main { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }',
     '.title { display:flex; align-items:center; justify-content:space-between; padding:8px 8px 8px 12px;',
     '  border-bottom:1px solid var(--line); cursor:move; user-select:none; font-weight:600; }',
     '.heading { display:flex; flex-direction:column; min-width:0; }',
@@ -50,31 +66,51 @@
     '.close { border:0; background:transparent; width:26px; height:26px; border-radius:6px; cursor:pointer;',
     '  font-size:18px; line-height:1; color:var(--muted); }',
     '.close:hover { background:var(--field); color:var(--fg); }',
-    '.body { padding:12px; display:flex; flex-direction:column; gap:10px; }',
+    '.body { padding:12px 12px 0; display:flex; flex-direction:column; gap:10px; }',
+    '.foot { padding:10px 12px 12px; }',
     'textarea { width:100%; min-height:84px; resize:vertical; padding:8px; border:1px solid var(--line);',
     '  border-radius:6px; background:var(--field); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;',
     '  font-size:12.5px; }',
-    'textarea.masked { -webkit-text-security:disc; }',
+    'textarea.masked, input.masked { -webkit-text-security:disc; }',
     'textarea:focus, select:focus, button:focus-visible, input:focus-visible { outline:2px solid var(--accent);',
     '  outline-offset:1px; }',
     'fieldset { margin:0; padding:8px 10px 10px; border:1px solid var(--line); border-radius:6px;',
-    '  display:flex; flex-direction:column; gap:8px; }',
+    '  display:flex; flex-direction:column; gap:8px; min-width:0; }',
+    'fieldset.plain { border:0; padding:0; gap:10px; }',
     'legend { padding:0 4px; color:var(--muted); font-size:12px; }',
     '.field { display:flex; align-items:center; justify-content:space-between; gap:8px; }',
-    '.field select { flex:0 1 200px; min-width:0; padding:4px 6px; border:1px solid var(--line); border-radius:6px;',
-    '  background:var(--field); }',
+    '.field select, .field input.text { flex:0 1 200px; min-width:0; padding:4px 6px; border:1px solid var(--line);',
+    '  border-radius:6px; background:var(--field); }',
     '.field label { white-space:nowrap; }',
+    '.field input[type=range] { flex:1 1 auto; min-width:0; accent-color:var(--accent); }',
+    '.value { min-width:2.2em; text-align:right; font-variant-numeric:tabular-nums; }',
     '.hint { margin:-4px 0 0; color:var(--muted); font-size:11.5px; }',
     '.hint.below { margin:4px 0 0; }',
     '.check { display:flex; align-items:center; gap:6px; cursor:pointer; }',
     '.check input { margin:0; accent-color:var(--accent); }',
     '.row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }',
+    '.group { display:flex; flex-direction:column; gap:8px; }',
+    '.seg { display:inline-flex; align-self:flex-start; border:1px solid var(--line); border-radius:6px;',
+    '  overflow:hidden; }',
+    '.seg label { position:relative; cursor:pointer; }',
+    '.seg input { position:absolute; opacity:0; width:1px; height:1px; margin:0; }',
+    '.seg span { display:block; padding:4px 14px; background:var(--field); }',
+    '.seg label + label span { border-left:1px solid var(--line); }',
+    '.seg input:checked + span { background:var(--accent); color:var(--accent-fg); font-weight:600; }',
+    '.seg input:focus-visible + span { outline:2px solid var(--accent); outline-offset:-2px; }',
+    '.pwrow { display:flex; gap:6px; }',
+    '.pwrow input { flex:1 1 auto; min-width:0; padding:6px 8px; border:1px solid var(--line); border-radius:6px;',
+    '  background:var(--field); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; }',
+    '.notice { border:1px solid var(--err); border-radius:6px; padding:8px 10px; display:flex;',
+    '  flex-direction:column; gap:6px; }',
+    '.notice strong { color:var(--err); font-weight:600; }',
     'button.btn { padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--field);',
     '  cursor:pointer; }',
     'button.btn:hover:not(:disabled) { border-color:var(--accent); }',
     'button.btn:disabled { opacity:.5; cursor:default; }',
     'button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); font-weight:600;',
     '  padding:6px 16px; }',
+    'button.notice-btn { align-self:flex-start; }',
     '.muted { color:var(--muted); }',
     '.status { min-height:18px; color:var(--muted); overflow-wrap:anywhere; }',
     '.status.ok { color:var(--ok); }',
@@ -85,21 +121,35 @@
   ].join('\n');
 
   var settings = Object.assign({}, DEFAULTS);
+  normalizeSettings();
   var host = null;
   var ui = {};
-  var sending = null; // { id, clearOnDone }
+  var sending = null; // { id, clearOnDone, onResult, done, total }
   var sequence = 0;
   var detectTimer = null;
   // Konsol bulunup bağlı olduğu doğrulanmadan metin sayfaya hiç iletilmez.
   var ready = false;
 
+  // Şifre sekmesi durumu. Düz şifre ve düz kayıt yalnızca bu şifre gösterildiği sürece bellekte tutulur.
+  var current = null; // { password, record }
+  var pwBusy = false; // kayıt yazımı / gönderim / görüntü sürüyor
+  var vaultState = 'unknown'; // 'unknown' | 'yes' | 'no'
+  var focusBeforeOpen = null; // kutu odak almadan önce sayfada odaklı öğe (alan doldurma için)
+
   // ---------- Ayarların saklanması ----------
+
+  function normalizeSettings() {
+    if (settings.tab !== 'console' && settings.tab !== 'password') settings.tab = 'console';
+    var stored = settings.gen && typeof settings.gen === 'object' ? settings.gen : {};
+    settings.gen = Object.assign({}, G.DEFAULTS, stored);
+  }
 
   function loadSettings() {
     try {
       return chrome.storage.local.get('settings').then(
         function (stored) {
           Object.assign(settings, (stored && stored.settings) || {});
+          normalizeSettings();
         },
         function () {}
       );
@@ -112,6 +162,45 @@
     try {
       chrome.storage.local.set({ settings: settings });
     } catch (err) {}
+  }
+
+  // ---------- Arka planla haberleşme ----------
+
+  // chrome.runtime kanalı sayfa tarafından dinlenemez. Hata olursa (eklenti yeniden yüklendi vb.)
+  // { ok:false } döner; hiçbir zaman atmaz.
+  function bg(message) {
+    try {
+      return Promise.resolve(chrome.runtime.sendMessage(message)).then(
+        function (res) {
+          return res || { ok: false, error: 'no-response' };
+        },
+        function () {
+          return { ok: false, error: 'no-background' };
+        }
+      );
+    } catch (err) {
+      return Promise.resolve({ ok: false, error: 'no-background' });
+    }
+  }
+
+  function putRecord(record) {
+    return bg({ type: 'record:put', id: record.id, record: record }).then(function (res) {
+      return !!(res && res.ok);
+    });
+  }
+
+  function newId() {
+    var c = globalThis.crypto;
+    if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+    // Güvenli olmayan (http) sayfalarda randomUUID yoktur; getRandomValues ile v4 UUID üret.
+    var b = new Uint8Array(16);
+    c.getRandomValues(b);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    var h = Array.prototype.map.call(b, function (x) {
+      return (x < 16 ? '0' : '') + x.toString(16);
+    }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
   }
 
   // ---------- Arayüz ----------
@@ -152,23 +241,16 @@
     return el('button', { type: 'button', class: 'btn' + (className ? ' ' + className : ''), text: text });
   }
 
-  function build() {
-    host = el('div', { id: 'keylord-host' });
-    host.style.cssText = 'position:fixed; top:16px; right:16px; z-index:2147483647;';
-    // closed: sayfanın kendi scriptleri host.shadowRoot ile kutunun içine (parolaya) ulaşamaz.
-    var root = host.attachShadow({ mode: 'closed' });
-    var sheet = new CSSStyleSheet();
-    sheet.replaceSync(CSS);
-    root.adoptedStyleSheets = [sheet];
+  function railButton(icon, label) {
+    return el('button', { type: 'button', class: 'tab', 'aria-label': label, title: label, text: icon });
+  }
 
-    ui.close = el('button', { type: 'button', class: 'close', 'aria-label': 'Kapat', title: 'Kapat', text: '×' });
-    // Kutunun hangi sayfada (çerçevede) açıldığını göster: parola yanlış adrese yazılmasın.
-    ui.origin = el('div', { class: 'origin', text: location.host || location.origin });
-    ui.title = el('div', { class: 'title' }, [
-      el('div', { class: 'heading' }, [el('span', { text: 'KeyLord' }), ui.origin]),
-      ui.close
-    ]);
+  function segOption(name, value, text) {
+    var input = el('input', { type: 'radio', name: name, value: value });
+    return { input: input, label: el('label', {}, [input, el('span', { text: text })]) };
+  }
 
+  function buildConsolePane() {
     ui.text = el('textarea', {
       id: 'text',
       'aria-label': 'Gönderilecek metin',
@@ -241,21 +323,154 @@
 
     ui.status = el('div', { class: 'status', role: 'status', 'aria-live': 'polite' });
 
-    var body = el('div', { class: 'body' }, [
+    return el('div', { class: 'body' }, [
       ui.text,
       mask.label,
       settingsBox,
       el('div', { class: 'row' }, [ui.send, ui.stop]),
       el('div', { class: 'row' }, [el('span', { class: 'muted', text: 'Tek tuş:' })].concat(ui.keys)),
-      ui.status,
-      // Durum satırından ayrı bir öğe: durum metni ne olursa olsun hep onun altında kalır.
-      el('div', { class: 'credit', text: 'Developed by Gürkan Deveci' })
+      ui.status
+    ]);
+  }
+
+  function buildPasswordPane() {
+    var random = segOption('kind', 'random', 'Rastgele');
+    var pin = segOption('kind', 'pin', 'PIN');
+    ui.kindRandom = random.input;
+    ui.kindPin = pin.input;
+    var kind = el('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Tür' }, [random.label, pin.label]);
+
+    // Şifre yalnızca bu salt okunur alanda (kapalı shadow root içinde) görünür; varsayılan gizli.
+    ui.pw = el('input', {
+      type: 'text',
+      class: 'masked',
+      readonly: '',
+      'aria-label': 'Üretilen şifre',
+      spellcheck: 'false',
+      autocomplete: 'off',
+      autocapitalize: 'off',
+      autocorrect: 'off'
+    });
+    ui.reveal = button('Göster');
+    ui.reveal.setAttribute('aria-pressed', 'false');
+    ui.regen = button('↻');
+    ui.regen.setAttribute('aria-label', 'Yeniden üret');
+    ui.regen.setAttribute('title', 'Yeniden üret');
+
+    ui.length = el('input', { type: 'range', id: 'gen-length', step: '1' });
+    ui.lengthValue = el('span', { class: 'value', 'aria-hidden': 'true' });
+    var lengthRow = el('div', { class: 'field' }, [
+      el('label', { for: 'gen-length', text: 'Uzunluk' }),
+      ui.length,
+      ui.lengthValue
     ]);
 
-    root.appendChild(el('div', { class: 'panel', role: 'dialog', 'aria-label': 'KeyLord' }, [ui.title, body]));
+    var digits = check('gen-digits', 'Rakam');
+    var symbols = check('gen-symbols', 'Sembol');
+    ui.digits = digits.input;
+    ui.symbols = symbols.input;
+    ui.symbolSet = select('gen-set', [
+      ['cli', 'CLI-güvenli'],
+      ['all', 'Tüm']
+    ]);
+    var ambiguous = check('gen-ambiguous', 'Benzer karakterleri hariç tut (0 O o 1 l I)');
+    ui.ambiguous = ambiguous.input;
+    // PIN türünde gizlenen denetimler.
+    ui.randomOnly = el('div', { class: 'group' }, [
+      el('div', { class: 'row' }, [digits.label, symbols.label]),
+      field('Semboller', ui.symbolSet),
+      ambiguous.label
+    ]);
+
+    ui.user = el('input', {
+      type: 'text',
+      id: 'gen-user',
+      class: 'text',
+      spellcheck: 'false',
+      autocomplete: 'off',
+      autocapitalize: 'off',
+      autocorrect: 'off'
+    });
+
+    ui.genBox = el('fieldset', { class: 'plain' }, [
+      kind,
+      el('div', { class: 'pwrow' }, [ui.pw, ui.reveal, ui.regen]),
+      lengthRow,
+      ui.randomOnly,
+      field('Kullanıcı adı / not', ui.user)
+    ]);
+
+    ui.vaultSetup = button('Kasayı kur', 'notice-btn');
+    ui.vaultNotice = el('div', { class: 'notice' }, [
+      el('strong', { text: 'Önce kasayı kurun' }),
+      el('span', {
+        class: 'muted',
+        text: 'Gönderilen şifreler kasaya kaydedilir; kasa kurulmadan şifre gönderilemez.'
+      }),
+      ui.vaultSetup
+    ]);
+    ui.vaultNotice.hidden = true;
+
+    ui.pwSend = button('Gönder', 'primary');
+    ui.pwCopy = button('Kopyala');
+    ui.pwStop = button('Durdur');
+    ui.pwTarget = el('p', { class: 'hint below' });
+    ui.pwStatus = el('div', { class: 'status', role: 'status', 'aria-live': 'polite' });
+
+    return el('div', { class: 'body' }, [
+      ui.genBox,
+      ui.vaultNotice,
+      el('div', { class: 'row' }, [ui.pwSend, ui.pwCopy, ui.pwStop]),
+      ui.pwTarget,
+      ui.pwStatus
+    ]);
+  }
+
+  function build() {
+    host = el('div', { id: 'keylord-host' });
+    host.style.cssText = 'position:fixed; top:16px; right:16px; z-index:2147483647;';
+    // closed: sayfanın kendi scriptleri host.shadowRoot ile kutunun içine (parolaya) ulaşamaz.
+    var root = host.attachShadow({ mode: 'closed' });
+    var sheet = new CSSStyleSheet();
+    sheet.replaceSync(CSS);
+    root.adoptedStyleSheets = [sheet];
+
+    ui.tabConsole = railButton('⌨', 'Konsol');
+    ui.tabPassword = railButton('🔑', 'Şifre');
+    ui.tabHistory = railButton('🕘', 'Geçmiş');
+    var rail = el('nav', { class: 'rail', 'aria-label': 'KeyLord menüsü' }, [
+      ui.tabConsole,
+      ui.tabPassword,
+      ui.tabHistory
+    ]);
+
+    ui.close = el('button', { type: 'button', class: 'close', 'aria-label': 'Kapat', title: 'Kapat', text: '×' });
+    // Kutunun hangi sayfada (çerçevede) açıldığını göster: parola yanlış adrese yazılmasın.
+    ui.origin = el('div', { class: 'origin', text: location.host || location.origin });
+    ui.title = el('div', { class: 'title' }, [
+      el('div', { class: 'heading' }, [el('span', { text: 'KeyLord' }), ui.origin]),
+      ui.close
+    ]);
+
+    ui.consolePane = buildConsolePane();
+    ui.passwordPane = buildPasswordPane();
+
+    var main = el('div', { class: 'main' }, [
+      ui.title,
+      ui.consolePane,
+      ui.passwordPane,
+      // Durum satırlarından ayrı bir öğe: durum metni ne olursa olsun hep onların altında kalır.
+      el('div', { class: 'foot' }, [el('div', { class: 'credit', text: 'Developed by Gürkan Deveci' })])
+    ]);
+
+    root.appendChild(el('div', { class: 'panel', role: 'dialog', 'aria-label': 'KeyLord' }, [rail, main]));
 
     applySettingsToUi();
+    applyGenToUi();
+    reflectTab();
     wireEvents();
+    wirePasswordEvents();
+    setReady(false);
     document.documentElement.appendChild(host);
   }
 
@@ -290,6 +505,12 @@
     ui.status.className = 'status' + (kind ? ' ' + kind : '');
   }
 
+  // Şifre sekmesinin durum satırı. Buraya asla şifre yazılmaz.
+  function setPwStatus(text, kind) {
+    ui.pwStatus.textContent = text;
+    ui.pwStatus.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
   // Gönder ve tek tuş düğmeleri yalnızca konsol bulunup bağlıyken ve gönderim yokken açıktır.
   function setBusy(busy) {
     var off = busy || !ready;
@@ -298,10 +519,14 @@
     ui.keys.forEach(function (b) {
       b.disabled = off;
     });
+    refreshPasswordControls();
   }
 
   function setReady(value) {
     ready = value;
+    ui.pwTarget.textContent = ready
+      ? 'Hedef: vCenter konsolu (tuş vuruşu).'
+      : 'Hedef: bu sayfadaki boş şifre alanları.';
     setBusy(!!sending);
   }
 
@@ -316,6 +541,15 @@
     });
     ui.close.addEventListener('click', hide);
 
+    ui.tabConsole.addEventListener('click', function () {
+      selectTab('console');
+    });
+    ui.tabPassword.addEventListener('click', function () {
+      selectTab('password');
+    });
+    // Geçmiş kutuda açılmaz: eklentinin Kasa sayfası yeni sekmede açılır; sekme değişmez.
+    ui.tabHistory.addEventListener('click', openVault);
+
     // Kutuda yazılan tuşlar sayfaya (dolayısıyla konsola) sızmasın.
     ['keydown', 'keypress', 'keyup'].forEach(function (type) {
       host.addEventListener(type, function (event) {
@@ -323,12 +557,22 @@
         if (type !== 'keydown') return;
         if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
           event.preventDefault();
-          sendText();
-        } else if (event.key === 'Escape' && !sending) {
+          if (settings.tab === 'password') sendPassword();
+          else sendText();
+        } else if (event.key === 'Escape' && !sending && !pwBusy) {
           hide();
         }
       });
     });
+
+    // Kutu açıkken kullanıcı sayfada başka bir alana tıklarsa alan doldurma o alanı hedef alır.
+    document.addEventListener(
+      'focusin',
+      function (event) {
+        if (host && event.target !== host && host.style.display !== 'none') focusBeforeOpen = event.target;
+      },
+      true
+    );
 
     enableDragging();
   }
@@ -354,6 +598,312 @@
       ui.title.addEventListener(type, function () {
         drag = null;
       });
+    });
+  }
+
+  // ---------- Sekmeler ----------
+
+  function reflectTab() {
+    var pw = settings.tab === 'password';
+    ui.consolePane.hidden = pw;
+    ui.passwordPane.hidden = !pw;
+    ui.tabConsole.classList.toggle('selected', !pw);
+    ui.tabPassword.classList.toggle('selected', pw);
+    ui.tabConsole.setAttribute('aria-pressed', String(!pw));
+    ui.tabPassword.setAttribute('aria-pressed', String(pw));
+  }
+
+  function selectTab(name) {
+    settings.tab = name;
+    saveSettings();
+    reflectTab();
+    if (name === 'password') enterPasswordTab();
+  }
+
+  function openVault() {
+    bg({ type: 'vault:open' });
+  }
+
+  // ---------- Şifre sekmesi ----------
+
+  function enterPasswordTab() {
+    if (!current) regenerate();
+    checkVault();
+  }
+
+  // Sekme her gösterildiğinde kasa yeniden sorulur (kasa sayfasında az önce kurulmuş olabilir).
+  function checkVault() {
+    vaultState = 'unknown';
+    refreshPasswordControls();
+    bg({ type: 'vault:exists' }).then(function (res) {
+      vaultState = res && res.exists ? 'yes' : 'no';
+      refreshPasswordControls();
+    });
+  }
+
+  function refreshPasswordControls() {
+    if (!ui.pwSend) return;
+    var can = vaultState === 'yes' && !pwBusy && !sending && !!current;
+    ui.pwSend.disabled = !can;
+    ui.pwCopy.disabled = !can;
+    ui.pwStop.disabled = !(sending && sending.onResult);
+    ui.genBox.disabled = pwBusy;
+    ui.vaultNotice.hidden = vaultState !== 'no';
+  }
+
+  function regenerate() {
+    current = { password: G.generate(settings.gen), record: null };
+    ui.pw.value = current.password;
+    setPwStatus(''); // önceki şifrenin sonucu yeni şifreye aitmiş gibi görünmesin
+    refreshPasswordControls();
+  }
+
+  function applyGenToUi() {
+    var gen = settings.gen;
+    ui.kindRandom.checked = gen.kind !== 'pin';
+    ui.kindPin.checked = gen.kind === 'pin';
+    ui.digits.checked = !!gen.digits;
+    ui.symbols.checked = !!gen.symbols;
+    ui.symbolSet.value = gen.symbolSet === 'all' ? 'all' : 'cli';
+    ui.ambiguous.checked = !!gen.avoidAmbiguous;
+    reflectGen();
+  }
+
+  function reflectGen() {
+    var gen = settings.gen;
+    var pin = gen.kind === 'pin';
+    ui.randomOnly.hidden = pin;
+    ui.length.min = pin ? '4' : '8';
+    ui.length.max = pin ? '12' : '64';
+    ui.length.value = String(pin ? gen.pinLength : gen.length);
+    ui.lengthValue.textContent = ui.length.value;
+    ui.symbolSet.disabled = !gen.symbols;
+  }
+
+  // Üretici ayarı değişince yeni şifre üretilir (eski şifrenin kaydı ile bağ kopar).
+  function onGenChange(save) {
+    reflectGen();
+    if (save) saveSettings();
+    regenerate();
+  }
+
+  function setReveal(on) {
+    ui.pw.classList.toggle('masked', !on);
+    ui.reveal.textContent = on ? 'Gizle' : 'Göster';
+    ui.reveal.setAttribute('aria-pressed', String(on));
+  }
+
+  function wirePasswordEvents() {
+    [ui.kindRandom, ui.kindPin].forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        settings.gen.kind = ui.kindPin.checked ? 'pin' : 'random';
+        onGenChange(true);
+      });
+    });
+    // Kaydırırken canlı yeni şifre; ayar bırakınca saklanır.
+    ui.length.addEventListener('input', function () {
+      var n = Number(ui.length.value);
+      if (settings.gen.kind === 'pin') settings.gen.pinLength = n;
+      else settings.gen.length = n;
+      onGenChange(false);
+    });
+    ui.length.addEventListener('change', saveSettings);
+    ui.digits.addEventListener('change', function () {
+      settings.gen.digits = ui.digits.checked;
+      onGenChange(true);
+    });
+    ui.symbols.addEventListener('change', function () {
+      settings.gen.symbols = ui.symbols.checked;
+      onGenChange(true);
+    });
+    ui.symbolSet.addEventListener('change', function () {
+      settings.gen.symbolSet = ui.symbolSet.value;
+      onGenChange(true);
+    });
+    ui.ambiguous.addEventListener('change', function () {
+      settings.gen.avoidAmbiguous = ui.ambiguous.checked;
+      onGenChange(true);
+    });
+
+    ui.regen.addEventListener('click', regenerate);
+    ui.reveal.addEventListener('click', function () {
+      setReveal(ui.pw.classList.contains('masked'));
+    });
+    ui.vaultSetup.addEventListener('click', openVault);
+    ui.pwSend.addEventListener('click', sendPassword);
+    ui.pwCopy.addEventListener('click', copyPassword);
+    ui.pwStop.addEventListener('click', function () {
+      command({ type: 'cancel' });
+    });
+  }
+
+  function recordInfo(cur, method) {
+    return {
+      url: location.href,
+      host: location.host,
+      username: ui.user.value.trim(),
+      password: cur.password,
+      method: method
+    };
+  }
+
+  // Yeni olay: kayıt yoksa oluşturulur, varsa aynı kayda eklenir. Kullanıcı adı/not en güncel değerle yazılır.
+  function nextRecord(cur, method, status) {
+    var at = Date.now();
+    var rec;
+    if (!cur.record) {
+      rec = R.newRecord(recordInfo(cur, method), at, newId());
+      if (status !== 'pending') {
+        rec.status = status;
+        rec.events = [{ at: at, method: method, status: status }];
+      }
+    } else {
+      rec = R.withEvent(cur.record, { at: at, method: method, status: status });
+    }
+    rec.username = ui.user.value.trim();
+    return rec;
+  }
+
+  function endPw(text, kind) {
+    pwBusy = false;
+    refreshPasswordControls();
+    setPwStatus(text, kind);
+  }
+
+  function sendPassword() {
+    if (pwBusy || sending || !current || vaultState !== 'yes') return;
+    var cur = current;
+    var useConsole = ready;
+    var method = useConsole ? 'usb' : 'fill';
+    pwBusy = true;
+    refreshPasswordControls();
+    setPwStatus('Kaydediliyor…');
+
+    // 1) Önce kayıt: yazılamazsa hiçbir şey gönderilmez.
+    var pending = nextRecord(cur, method, 'pending');
+    putRecord(pending).then(function (ok) {
+      if (!ok) return endPw('Kayıt yazılamadı; gönderilmedi.', 'error');
+      cur.record = pending;
+
+      // 2) Gönderim.
+      if (useConsole) {
+        var plan = L.planKeys(cur.password, {
+          layout: settings.layout,
+          deadKeyFix: settings.deadKeyFix,
+          appendEnter: settings.appendEnter
+        });
+        if (plan.unsupported.length) {
+          return finishSend(cur, method, 'failed', {
+            text: 'Seçili klavye düzeninde yazılamayan karakter var. Hiçbir şey gönderilmedi.'
+          });
+        }
+        start(plan.strokes, false, function (result, errorText) {
+          finishSend(cur, method, R.runStatus(result), { result: result, errorText: errorText });
+        });
+      } else {
+        var filled = F.fillPassword(document, focusBeforeOpen, cur.password);
+        finishSend(cur, method, R.fillStatus(filled), { filled: filled });
+      }
+    });
+  }
+
+  function resultText(method, status, info) {
+    if (info.text) return info.text;
+    if (method === 'fill') {
+      return status === 'sent' ? 'Şifre ' + info.filled + ' alana yazıldı ve geçmişe kaydedildi.' : FILL_ERROR;
+    }
+    var r = info.result || { sent: 0, total: 0 };
+    if (status === 'sent') return 'Şifre konsola gönderildi (' + r.total + ' tuş vuruşu) ve geçmişe kaydedildi.';
+    if (status === 'partial') {
+      return (
+        'Yarıda kaldı: ' + r.sent + ' / ' + r.total + ' tuş vuruşu gönderildi. Geçmişe "Yarım" olarak kaydedildi.'
+      );
+    }
+    return (info.errorText ? info.errorText + '. ' : 'Hiçbir tuş gönderilmedi. ') + 'Geçmişe "Başarısız" olarak kaydedildi.';
+  }
+
+  // 3) Sonuç kayda işlenir; gönderildiyse/yarımsa ekran görüntüsü alınır.
+  function finishSend(cur, method, status, info) {
+    cur.record = nextRecord(cur, method, status);
+    var text = resultText(method, status, info);
+    var kind = status === 'sent' ? 'ok' : 'error';
+    putRecord(cur.record).then(function (ok) {
+      if (!ok) text += ' Sonuç kayda işlenemedi (kayıt "Bekliyor" kalabilir).';
+      if (status !== 'sent' && status !== 'partial') return endPw(text, kind);
+      setPwStatus('Ekran görüntüsü alınıyor…');
+      return capture(cur).then(function (note) {
+        endPw(text + note, kind);
+      });
+    });
+  }
+
+  function nextFrame() {
+    return new Promise(function (resolve) {
+      var done = false;
+      function go() {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve();
+      }
+      // Arka plandaki sekmede rAF çalışmaz; takılıp kalmasın.
+      var timer = setTimeout(go, 200);
+      requestAnimationFrame(go);
+    });
+  }
+
+  // Kutu görüntüye girmesin (açık şifre) diye gizlenir, arka plan sekmenin görüntüsünü alır, kutu geri açılır.
+  function capture(cur) {
+    var wasVisible = host.style.display !== 'none';
+    if (wasVisible) host.style.display = 'none';
+    var id = cur.record.id;
+    return nextFrame()
+      .then(nextFrame)
+      .then(function () {
+        return bg({ type: 'shot:capture', id: id });
+      })
+      .then(
+        function (res) {
+          if (wasVisible) host.style.display = '';
+          if (!res || !res.ok) return ' Ekran görüntüsü alınamadı.';
+          cur.record = Object.assign({}, cur.record, { hasScreenshot: true });
+          return putRecord(cur.record).then(function (ok) {
+            return ok ? '' : ' Ekran görüntüsü kayda işlenemedi.';
+          });
+        },
+        function () {
+          if (wasVisible) host.style.display = '';
+          return ' Ekran görüntüsü alınamadı.';
+        }
+      );
+  }
+
+  function copyPassword() {
+    if (pwBusy || sending || !current || vaultState !== 'yes') return;
+    var clip = navigator.clipboard;
+    if (!clip || typeof clip.writeText !== 'function') {
+      setPwStatus('Bu sayfada panoya erişilemiyor (güvenli olmayan bağlantı). Hiçbir şey kopyalanmadı.', 'error');
+      return;
+    }
+    var cur = current;
+    pwBusy = true;
+    refreshPasswordControls();
+    setPwStatus('Kaydediliyor…');
+    var rec = nextRecord(cur, 'copy', 'copied');
+    putRecord(rec).then(function (ok) {
+      if (!ok) return endPw('Kayıt yazılamadı; kopyalanmadı.', 'error');
+      cur.record = rec;
+      return clip.writeText(cur.password).then(
+        function () {
+          endPw('Şifre panoya kopyalandı ve geçmişe kaydedildi.', 'ok');
+        },
+        function () {
+          cur.record = nextRecord(cur, 'copy', 'failed');
+          return putRecord(cur.record).then(function () {
+            endPw('Panoya kopyalanamadı.', 'error');
+          });
+        }
+      );
     });
   }
 
@@ -393,22 +943,31 @@
     if (message.type === 'status') return onStatus(message);
     if (!sending || message.id !== sending.id) return;
 
+    var onResult = sending.onResult;
     if (message.type === 'progress') {
-      setStatus('Gönderiliyor… ' + message.done + ' / ' + message.total);
+      sending.done = message.done;
+      var progress = 'Gönderiliyor… ' + message.done + ' / ' + message.total;
+      if (onResult) setPwStatus(progress);
+      else setStatus(progress);
     } else if (message.type === 'done') {
       var clearNow = sending.clearOnDone && !message.cancelled;
       finish();
-      if (message.cancelled) {
+      if (onResult) {
+        onResult({ sent: message.sent, total: message.total, cancelled: !!message.cancelled });
+      } else if (message.cancelled) {
         setStatus('Durduruldu: ' + message.sent + ' / ' + message.total + ' tuş vuruşu gönderildi.', 'error');
       } else {
         if (clearNow) ui.text.value = '';
         setStatus('Gönderildi: ' + message.total + ' tuş vuruşu.', 'ok');
       }
     } else if (message.type === 'error') {
+      // Yarıda hata: son ilerlemeye göre kaç tuş gittiği bilinir.
+      var partial = { sent: sending.done || 0, total: sending.total, cancelled: true };
       finish();
       var text = ERRORS[message.code] || ERRORS['send-failed'];
       if (message.message) text += ': ' + message.message;
-      setStatus(text, 'error');
+      if (onResult) onResult(partial, text);
+      else setStatus(text, 'error');
     }
   }
 
@@ -417,17 +976,25 @@
     setBusy(false);
   }
 
-  function start(strokes, clearOnDone) {
-    if (sending) return;
+  // onResult verilirse (şifre sekmesi) sonuç { sent, total, cancelled } ile ona bildirilir.
+  function start(strokes, clearOnDone, onResult) {
+    var none = { sent: 0, total: strokes.length, cancelled: false };
+    if (sending) {
+      if (onResult) onResult(none, ERRORS.busy);
+      return;
+    }
     if (!ready) {
       setStatus('Konsol hazır değil; hiçbir şey gönderilmedi.', 'error');
       detect();
+      if (onResult) onResult(none, 'Konsol hazır değil');
       return;
     }
     var speed = SPEEDS[settings.speed] || SPEEDS.normal;
-    sending = { id: 'ks' + ++sequence, clearOnDone: clearOnDone };
+    sending = { id: 'ks' + ++sequence, clearOnDone: clearOnDone, onResult: onResult, done: 0, total: strokes.length };
     setBusy(true);
-    setStatus('Gönderiliyor… 0 / ' + strokes.length);
+    var progress = 'Gönderiliyor… 0 / ' + strokes.length;
+    if (onResult) setPwStatus(progress);
+    else setStatus(progress);
     command({
       type: 'send',
       id: sending.id,
@@ -438,7 +1005,7 @@
   }
 
   function sendText() {
-    if (sending) return;
+    if (sending || pwBusy) return;
     var text = ui.text.value;
     if (!text) {
       setStatus('Gönderilecek metin yok.', 'error');
@@ -465,17 +1032,30 @@
   function show() {
     host.style.display = '';
     detect();
-    ui.text.focus();
+    if (settings.tab === 'password') {
+      enterPasswordTab();
+      ui.user.focus();
+    } else {
+      ui.text.focus();
+    }
   }
 
   function hide() {
     if (sending) command({ type: 'cancel' });
     clearTimeout(detectTimer);
     ui.text.value = ''; // Kapatılan kutuda parola kalmasın.
+    // Üretilen şifre ve düz kaydı da bellekten bırakılır; kutu yeniden açılınca yeni şifre üretilir.
+    current = null;
+    ui.pw.value = '';
+    setReveal(false);
+    setPwStatus('');
+    refreshPasswordControls();
     host.style.display = 'none';
   }
 
   function toggle() {
+    // Kutu odak almadan önce: alan doldurma kullanıcının tıkladığı şifre alanını hedef alsın.
+    if (!host || host.style.display === 'none') focusBeforeOpen = document.activeElement;
     if (!host) {
       return loadSettings().then(function () {
         if (host) return;

@@ -1,5 +1,5 @@
 // Kasa sayfasını tarayıcıda (uzantı olmadan) denemek için bellek içi `chrome` taklidi.
-// Yalnızca tests/vault-harness.html yükler; uzantıya girmez. Gerçek chrome.storage varsa hiçbir şey yapmaz.
+// Yalnızca test sayfaları (vault-harness, mock-console, mock-form) yükler; uzantıya girmez. Gerçek chrome.storage varsa hiçbir şey yapmaz.
 // Veriler sayfa yenilenince kaybolur.
 (function (g) {
   'use strict';
@@ -116,9 +116,75 @@
       lastError: undefined,
       getURL: function (p) {
         return new URL(String(p).replace(/^\//, ''), g.location.href).href;
+      },
+      // background.js mesaj API'sinin bellek içi taklidi (vault:exists, record:put, shot:capture, vault:open).
+      sendMessage: function (msg, cb) {
+        var p = Promise.resolve()
+          .then(function () {
+            return handleMessage(clone(msg));
+          })
+          .catch(function (e) {
+            return { ok: false, error: String((e && e.message) || e).slice(0, 80) };
+          });
+        if (typeof cb === 'function') {
+          p.then(cb);
+          return undefined;
+        }
+        return p;
       }
     }
   };
+
+  // ---- Arka plan taklidi: gerçek KeyLordVaultCrypto + KeyLordStore ile, taklit depolamaya yazar ----
+  // (Bu iki dosya, mesaj gönderilmeden önce sayfada yüklü olmalıdır.)
+  var bg = {
+    failPut: false,
+    failShot: false,
+    opened: 0,
+    captures: 0,
+    messages: [], // yalnızca { type, id } – kayıt içeriği (şifre) tutulmaz
+    privateKey: null,
+    store: null
+  };
+  // Küçük sahte JPEG (SOI ... EOI).
+  var FAKE_JPEG = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9];
+
+  function bgStore() {
+    if (!bg.store) bg.store = g.KeyLordStore.createStore({ sync: sync, local: local });
+    return bg.store;
+  }
+
+  async function handleMessage(msg) {
+    if (!msg || typeof msg.type !== 'string') return { ok: false, error: 'unknown' };
+    bg.messages.push({ type: msg.type, id: msg.id });
+    var store = bgStore();
+    var header;
+    switch (msg.type) {
+      case 'vault:exists':
+        return { exists: !!(await store.getHeader()) };
+      case 'record:put':
+        if (typeof msg.id !== 'string' || !msg.id || !msg.record || typeof msg.record !== 'object') {
+          return { ok: false, error: 'bad-request' };
+        }
+        if (bg.failPut) return { ok: false, error: 'shim-fail' };
+        header = await store.getHeader();
+        if (!header) return { ok: false, error: 'no-vault' };
+        var res = await store.putRecord(msg.id, await g.KeyLordVaultCrypto.encryptJson(header, msg.record));
+        return { ok: true, synced: res.synced };
+      case 'shot:capture':
+        if (typeof msg.id !== 'string' || !msg.id || bg.failShot) return { ok: false, error: 'capture-failed' };
+        header = await store.getHeader();
+        if (!header) return { ok: false, error: 'no-vault' };
+        await store.putShot(msg.id, await g.KeyLordVaultCrypto.encryptBytes(header, new Uint8Array(FAKE_JPEG)));
+        bg.captures++;
+        return { ok: true };
+      case 'vault:open':
+        bg.opened++;
+        return { ok: true };
+      default:
+        return { ok: false, error: 'unknown' };
+    }
+  }
 
   // Test yardımcıları (yalnızca taklitte).
   g.__shim = {
@@ -143,6 +209,47 @@
     // true: sync.set her çağrıda reddeder (bekleyen kayıt senaryosu).
     failSync: function (on) {
       sync._fail = !!on;
+    },
+    // Arka plan taklidinin durumu (opened, captures, messages, failPut, failShot).
+    bg: bg,
+    // Kasa kurar (testte düşük tur: { iterations: 1000 }); gizli anahtar records() için saklanır.
+    createVault: async function (password, opts) {
+      var v = await g.KeyLordVaultCrypto.createVault(password, opts || {});
+      await bgStore().putHeader(v.header);
+      bg.privateKey = v.privateKey;
+      return v.header;
+    },
+    // true: record:put { ok:false } döner (kayıt yazılamadı senaryosu).
+    failRecordPut: function (on) {
+      bg.failPut = !!on;
+    },
+    // true: shot:capture { ok:false } döner.
+    failShot: function (on) {
+      bg.failShot = !!on;
+    },
+    // Kayıtları createVault'un gizli anahtarıyla çözer: [{ id, synced, record }].
+    records: async function () {
+      if (!bg.privateKey) throw new Error('no-private-key');
+      var list = await bgStore().listRecords();
+      var out = [];
+      for (var i = 0; i < list.length; i++) {
+        out.push({
+          id: list[i].id,
+          synced: list[i].synced,
+          record: await g.KeyLordVaultCrypto.decryptJson(bg.privateKey, list[i].envelope)
+        });
+      }
+      return out;
+    },
+    // Yerelde şifreli ekran görüntüsü bulunan kayıt id'leri.
+    shotIds: function () {
+      return Object.keys(local._data)
+        .filter(function (k) {
+          return k.indexOf('shot:') === 0;
+        })
+        .map(function (k) {
+          return k.slice(5);
+        });
     }
   };
 })(globalThis);

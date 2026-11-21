@@ -162,19 +162,18 @@
 </script>
 
 <!-- Eklenti betikleri. Gerçek eklentide engine.js sayfa dünyasında, diğerleri yalıtılmış dünyada çalışır;
-     burada hepsi aynı sayfada yüklenir ve chrome.storage basit bir taklitle karşılanır. -->
-<script>
-  window.chrome = window.chrome || {};
-  if (!chrome.storage) {
-    chrome.storage = { local: {
-      _data: {},
-      get: function (key) { var out = {}; out[key] = this._data[key]; return Promise.resolve(out); },
-      set: function (items) { Object.assign(this._data, items); return Promise.resolve(); }
-    } };
-  }
-</script>
+     burada hepsi aynı sayfada yüklenir. -->
+<!-- chrome-shim: bellek içi chrome.storage + chrome.runtime.sendMessage (arka plan taklidi).
+     Kasa kurmak için konsolda: await __shim.createVault('test-parola-123', { iterations: 1000 });
+     kayıtları görmek için: await __shim.records() -->
+<script src="chrome-shim.js"></script>
+<script src="../src/vault-crypto.js"></script>
+<script src="../src/store.js"></script>
 <script src="../src/engine.js"></script>
 <script src="../src/layouts.js"></script>
+<script src="../src/generator.js"></script>
+<script src="../src/records.js"></script>
+<script src="../src/fieldfill.js"></script>
 <script src="../src/dialog.js"></script>
 </body>
 </html>
