@@ -13,6 +13,11 @@ ana parolayla korunan şifreli bir kasaya kaydeder. Windows ve macOS'ta Chrome i
 4. **Paketlenmemiş öğe yükle**'ye basıp bu klasörü (içinde `manifest.json` olan) seçin.
 5. Araç çubuğundaki yapboz simgesinden **KeyLord**'i sabitleyin.
 
+**1.0'dan 1.1'e güncelleme:** 1.1 sürümü `manifest.json`'a sabit kimlik (`key`) ekler, bu yüzden eklenti
+kimliği değişir. Eski klasörü yerinde güncellemek yetmez: `chrome://extensions`'da eski KeyLord'u **kaldırın**
+ve yeni klasörü yukarıdaki gibi **yeniden yükleyin**. Kimlik değiştiği için konsol ayarları (klavye düzeni,
+hız vb.) bir kez sıfırlanır; yeniden seçin. Kısayolu da gerekirse yeniden atayın.
+
 Kısayol varsayılan olarak **Alt+Shift+K**'dır (macOS'ta Option+Shift+K). Çalışmıyorsa veya değiştirmek
 isterseniz `chrome://extensions/shortcuts` sayfasından atayın.
 
@@ -84,8 +89,9 @@ gönderim yapılmaz, böylece gönderilip de kaydı olmayan şifre oluşmaz. Gö
 - **Başarısız**: hiç tuş gitmedi veya doldurulacak alan bulunamadı. Kayıt silinmez, listede soluk görünür.
 
 Başarılı ve yarım gönderimden sonra sayfanın **ekran görüntüsü** alınır (şifre görüntüye girmesin diye kutu
-bir an gizlenir). Alınamazsa kayıt görüntüsüz kalır ve durum satırı bunu söyler. **Kopyala** da kayıt
-oluşturur; aynı şifre için sonraki kopyala/gönder işlemleri aynı kaydın olay listesine eklenir.
+bir an gizlenir). Alınamazsa (ör. bu arada başka sekmeye geçildiyse; başka sayfanın görüntüsü alınmaz) kayıt görüntüsüz kalır ve durum satırı bunu söyler. **Kopyala** da kayıt
+oluşturur; aynı şifre için sonraki kopyala/gönder işlemleri aynı kaydın olay listesine eklenir. Şifre alanında
+Ctrl+C / Cmd+C (veya kes) de **Kopyala** gibi çalışır ve kayda işlenir; alan sürüklenemez.
 
 Kasa kurulmadan şifre gönderilemez; 🔑 sekmesi "Önce kasayı kurun" der ve Kasa sayfasını açan düğme gösterir.
 
@@ -104,6 +110,10 @@ Kasa kurulmadan şifre gönderilemez; 🔑 sekmesi "Önce kasayı kurun" der ve 
   güvenli bir yerde tutun ve düzenli **Yedek al** yapın.
 - Kasa, kurulumda Chrome'daki Google hesabının e-postasıyla etiketlenir; başka hesapla açılırsa uyarı gösterilir
   (engellemez).
+- Kasa başlığı her açılışta doğrulanır (sürüm, tuz, tur sayısı ve gizli anahtarın başlıktaki açık anahtarla
+  eşleşmesi). Bozuk veya değiştirilmiş başlıkta "Kasa başlığı bozuk veya değiştirilmiş." uyarısı çıkar ve kasa açılmaz.
+- Kayıt durumu, kaydın olaylarındaki en iyi sonuçtur: bir kez gönderilmiş şifre sonraki başarısız denemeyle
+  "Başarısız" görünmez (olaylar ayrıntıda tek tek listelenir).
 
 ### Eşitleme
 
@@ -113,6 +123,17 @@ sessizce yalnızca bu bilgisayarda kalır (Kasa sayfası, hesap yoksa uyarı gö
 sınırlıdır: yaklaşık **150–200 kayıt**; %80'e gelince Kasa sayfası uyarır. Eşitlenemeyen kayıtlar yerelde
 saklanır ve sonra yeniden denenir, "N kayıt eşitlenmedi" diye gösterilir; hiçbir kayıt sessizce silinmez.
 **Ekran görüntüleri eşitlenmez**, yalnızca bu bilgisayarda kalır.
+
+**Birden çok bilgisayar: ikinci kasa kurmayın.** Kasayı yalnızca bir kez, ilk bilgisayarda kurun. Başka bir
+bilgisayarda Kasa sayfası "Kasayı kur" ekranını gösteriyorsa yeni kasa kurmayın: kasanın eşitlenmesini bekleyin
+(birkaç dakika; sayfa her 5 saniyede bir kontrol eder ve kasa gelince kendiliğinden kilit ekranına geçer) ya da
+**Yedekten yükle** ile kurun. Aynı Google hesabıyla oturum açıksa kurulum ekranı bu konuda uyarır.
+
+Yanlışlıkla ikinci bir kasa kurulduysa, diğer kasanın anahtarıyla yazılmış kayıtlar kaybolmaz: Kasa sayfası
+"Eski kasadan N kayıt var" der. O kasanın ana parolasını girip **Eski kasayı aç**'a basın; kayıtlar (ve bu
+bilgisayardaki ekran görüntüleri) çözülüp mevcut kasaya yeniden şifrelenir. Her kasanın başlığı eşitlenen
+depoda ve bu bilgisayarda saklandığı için eski kasa bilinir. Kasa kimliği taşımayan çok eski kayıtlar
+"çözülemedi" olarak gösterilmeye devam eder; onlar için yedekten yükleyin.
 
 ### Yedek al / Yedekten yükle
 
