@@ -1,3 +1,5 @@
 .DS_Store
 KeyLord.zip
 .claude/
+key.pem
+*.pem
