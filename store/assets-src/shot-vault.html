@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>KeyLord Kasa</title>
+    <link rel="stylesheet" href="../../src/vault-page.css" />
+    <style>html,body{width:1280px;height:800px;overflow:hidden}</style>
+  </head>
+  <body>
+    <script src="../../tests/chrome-shim.js"></script>
+    <script src="../../src/vault-crypto.js"></script>
+    <script src="../../src/vault-session.js"></script>
+    <script src="../../src/store.js"></script>
+    <script src="../../src/records.js"></script>
+    <script src="../../src/backup.js"></script>
+    <script>
+      (async function () {
+        // Gösterim kasası: örnek kayıtlar (gerçek veri değildir), ardından kilidi açık oturum ve Kasa sayfası.
+        var v = await KeyLordVaultCrypto.createVault('gosterim-parolasi-123', { iterations: 1000, googleEmail: 'ornek@example.com' });
+        await KeyLordStore.createStore({ sync: chrome.storage.sync, local: chrome.storage.local }).putHeader(v.header);
+        var day = 24 * 3600 * 1000, t = Date.now();
+        var samples = [
+          ['https://firewall-01.example.local/admin/users', 'firewall-01.example.local', 'admin', 'Vt7!kRp2@mQ9%xLz', 'fill', 'sent', 0.1],
+          ['https://vcenter.example.local/ui/webconsole.html', 'vcenter.example.local', 'root (srv-app-01)', 'h3K@pW9-zR4.qT7m', 'usb', 'sent', 1.2],
+          ['https://vcenter.example.local/ui/webconsole.html', 'vcenter.example.local', 'Administrator (DC01)', 'N8=wq4:Gm2_Lv6!s', 'usb', 'partial', 3.5],
+          ['https://sophos.example.local/webconsole', 'sophos.example.local', 'admin', 'Yc5+Pj8%Hd3,Rn6@', 'copy', 'copied', 6.4]
+        ];
+        for (var i = 0; i < samples.length; i++) {
+          var s = samples[i], at = Math.round(t - s[6] * day);
+          var rec = KeyLordRecords.withEvent(
+            KeyLordRecords.newRecord({ url: s[0], host: s[1], username: s[2], password: s[3], method: s[4] }, at, 'demo' + i),
+            { at: at + 4000, method: s[4], status: s[5] }
+          );
+          await __shim.addRecord(rec);
+        }
+        await KeyLordVaultSession.saveKey(chrome.storage.session, v.privateKey, Date.now());
+        var sc = document.createElement('script');
+        sc.src = '../../src/vault-page.js';
+        sc.onload = function () {
+          // İlk kaydın ayrıntısını aç (şifre gizli başlar).
+          var tries = 0;
+          (function openFirst() {
+            var row = document.querySelector('[data-id]');
+            if (row) row.click();
+            else if (tries++ < 50) setTimeout(openFirst, 100);
+          })();
+        };
+        document.body.appendChild(sc);
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>KeyLord – konsol</title>
+    <link rel="stylesheet" href="showcase.css" />
+  </head>
+  <body>
+    <div class="bar">VM Konsolu <small>srv-app-01 · Linux</small></div>
+    <div class="stage" id="console">
+      <canvas id="mainCanvas" width="800" height="600"></canvas>
+      <div class="term">Ubuntu 24.04 LTS srv-app-01 tty1
+
+srv-app-01 login: admin
+Password:
+Last login: Fri Nov 21 09:12:44 2026
+
+admin@srv-app-01:~$ sudo systemctl restart nginx && \
+  journalctl -u nginx --since "5 min ago" | tail -n 20
+[sudo] password for admin:
+admin@srv-app-01:~$ _</div>
+    </div>
+    <div class="caption">Metni yazın, KeyLord konsola tuş tuş göndersin
+      <span>Kopyala-yapıştırın çalışmadığı web konsollarında uzun komutlar ve parolalar · Türkçe Q ve US düzeni</span></div>
+    <script src="../../tests/chrome-shim.js"></script>
+    <script src="../../src/vault-crypto.js"></script>
+    <script src="../../src/store.js"></script>
+    <script src="../../src/release.js"></script>
+    <script src="../../src/engine.js"></script>
+    <script src="../../src/layouts.js"></script>
+    <script src="../../src/generator.js"></script>
+    <script src="../../src/records.js"></script>
+    <script src="../../src/fieldfill.js"></script>
+    <script src="../../src/dialog.js"></script>
+    <script src="common.js"></script>
+    <script>
+      (async function () {
+        installFakeConsole(document.getElementById('console'));
+        await setSettings({ tab: 'console', layout: 'trq', deadKeyFix: 'windows', speed: 'normal', appendEnter: true, clearAfter: true, hideText: false });
+        await __keyLordDialog.toggle();
+      })();
+    </script>
+  </body>
+</html>

@@ -273,6 +273,10 @@ zip -r KeyLord.zip manifest.json background.js vault.html src icons README.md LI
 
 Simgeleri yeniden üretmek için: `python3 tools/make_icons.py`
 
+## Gizlilik politikası
+
+Ayrıntılı gizlilik politikası: [PRIVACY.md](PRIVACY.md).
+
 ## Lisans
 
 [MIT](LICENSE) © 2026 Gürkan Deveci
