@@ -144,6 +144,7 @@
     putDelay: 0,
     shotDelay: 0, // shot:capture yanıtını geciktirir (görüntü alınırken aç/kapat senaryosu)
     capturing: false,
+    installed: '1.1.0', // release:latest için taklit kurulu sürüm
     opened: 0,
     captures: 0,
     messages: [], // yalnızca { type, id } – kayıt içeriği (şifre) tutulmaz
@@ -190,6 +191,15 @@
       case 'vault:open':
         bg.opened++;
         return { ok: true };
+      case 'release:latest':
+        // Gerçek GitHub API'sine gider (sayfadan; CORS açık). bg.installed taklit kurulu sürümdür.
+        if (!g.KeyLordRelease) return { ok: false, installed: bg.installed };
+        return g.KeyLordRelease.getLatest({
+          fetch: function (u, i) { return g.fetch(u, i); },
+          cache: local,
+          now: Date.now(),
+          installed: bg.installed
+        });
       default:
         return { ok: false, error: 'unknown' };
     }

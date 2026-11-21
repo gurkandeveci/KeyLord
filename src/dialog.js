@@ -119,6 +119,10 @@
     '.status.error { color:var(--err); }',
     '.credit { padding-top:8px; border-top:1px solid var(--line); color:var(--muted); font-size:11.5px;',
     '  text-align:center; }',
+    '.release { margin-top:2px; color:var(--muted); font-size:11px; text-align:center;',
+    '  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }',
+    '.release a { color:inherit; }',
+    '.release .update { color:var(--accent); font-weight:600; }',
     '[hidden] { display:none !important; }'
   ].join('\n');
 
@@ -431,6 +435,30 @@
     ]);
   }
 
+  // GitHub'daki son sürümü (etiket · commit) gösterir; kurulu sürüm eskiyse "Güncelleme var" der.
+  // Bilgiyi arka plan getirir (1 saat önbellekli); sayfaya yalnızca bu herkese açık bilgi yazılır.
+  function loadRelease() {
+    bg({ type: 'release:latest' }).then(function (res) {
+      if (!ui.release) return;
+      ui.release.textContent = '';
+      if (!res || !res.ok) {
+        ui.release.textContent =
+          'Latest Release: alınamadı' + (res && res.installed ? ' · kurulu v' + res.installed : '');
+        return;
+      }
+      // Bağlantı yalnızca github.com adresine gidebilir.
+      var safe = /^https:\/\/github\.com\//.test(String(res.url || ''));
+      var link = safe
+        ? el('a', { href: res.url, target: '_blank', rel: 'noopener noreferrer', title: 'GitHub sürüm sayfası' })
+        : el('span');
+      link.textContent = 'Latest Release: ' + res.tag + ' · ' + res.sha;
+      ui.release.appendChild(link);
+      if (res.newer) {
+        ui.release.appendChild(el('div', { class: 'update', text: 'Güncelleme var (kurulu: v' + res.installed + ')' }));
+      }
+    });
+  }
+
   function build() {
     host = el('div', { id: 'keylord-host' });
     host.style.cssText = 'position:fixed; top:16px; right:16px; z-index:2147483647;';
@@ -465,12 +493,16 @@
       ui.consolePane,
       ui.passwordPane,
       // Durum satırlarından ayrı bir öğe: durum metni ne olursa olsun hep onların altında kalır.
-      el('div', { class: 'foot' }, [el('div', { class: 'credit', text: 'Developed by Gürkan Deveci' })])
+      el('div', { class: 'foot' }, [
+        el('div', { class: 'credit', text: 'developed by Gürkan Deveci' }),
+        (ui.release = el('div', { class: 'release', text: 'Latest Release: …' }))
+      ])
     ]);
 
     root.appendChild(el('div', { class: 'panel', role: 'dialog', 'aria-label': 'KeyLord' }, [rail, main]));
 
     applySettingsToUi();
+    loadRelease();
     applyGenToUi();
     reflectTab();
     wireEvents();

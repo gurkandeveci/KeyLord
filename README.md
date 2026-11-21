@@ -161,8 +161,13 @@ Bilgisayar değiştirirken, eşitleme kapalıysa veya eklenti kimliği değişti
   parola hesabı kilitleyebilir.
 - **Gizlilik**: Konsol sekmesinde yazdığınız metin kaydedilmez; yalnızca ayarlar Chrome'un yerel deposunda
   tutulur. Şifre üreticiden gönderilen şifreler ise yalnızca şifreli olarak kasaya yazılır; düz metin olarak
-  depolanmaz, eşitlenmez, yedeğe girmez. Hiçbir şey eklentinin dışındaki bir sunucuya gönderilmez. Eklenti
-  yalnızca simgesine bastığınız sekmeye erişir (`activeTab`); tüm sitelere erişim izni istemez.
+  depolanmaz, eşitlenmez, yedeğe girmez. Eklenti yalnızca simgesine bastığınız sekmeye erişir (`activeTab`);
+  tüm sitelere erişim izni istemez.
+- **Sürüm bilgisi ve GitHub**: Kutunun altında GitHub'daki son sürüm (Latest Release) ve commit numarası
+  gösterilir (örn. `Latest Release: v1.1.0 · dfe3a61`); kurulu sürüm eskiyse "Güncelleme var" yazar. Bunun için
+  eklenti, en çok saatte bir, `api.github.com`'a herkese açık sürüm bilgisini sorar. Bu istekte sizin
+  verilerinizden hiçbir şey gönderilmez; GitHub yalnızca isteğin geldiği IP adresini görür. Bunun dışında
+  hiçbir şey eklentinin dışındaki bir sunucuya gönderilmez.
 
 ## Nasıl çalışır
 
@@ -186,6 +191,7 @@ bulunur, web sayfaları bunlara erişemez.
 | `src/records.js` | Kayıt modeli ve birleştirme |
 | `src/vault-crypto.js`, `src/vault-session.js` | Kasa şifrelemesi (ECDH P-256 + AES-GCM, PBKDF2) ve 15 dakikalık oturum |
 | `src/store.js`, `src/backup.js` | Depolama (`storage.sync` / `storage.local`) ve yedek dosyası |
+| `src/release.js` | GitHub'daki son sürüm ve commit numarası (1 saat önbellekli) |
 | `vault.html`, `src/vault-page.js`, `src/vault-page.css` | Kasa sayfası |
 
 ## İzinler

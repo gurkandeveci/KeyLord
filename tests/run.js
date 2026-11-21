@@ -18,12 +18,14 @@ loadFile('src/records.js');
 loadFile('src/store.js');
 loadFile('src/backup.js');
 loadFile('src/fieldfill.js');
+loadFile('src/release.js');
 loadFile('tests/layouts.test.js');
 loadFile('tests/engine.test.js');
 loadFile('tests/generator.test.js');
 loadFile('tests/records.test.js');
 loadFile('tests/store.test.js');
 loadFile('tests/fieldfill.test.js');
+loadFile('tests/release.test.js');
 // WebCrypto gerektiren testler yalnızca crypto.subtle varsa (jsc'de atlanır).
 if (globalThis.crypto && globalThis.crypto.subtle) {
   loadFile('tests/vault-crypto.test.js');

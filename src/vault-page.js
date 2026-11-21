@@ -163,7 +163,7 @@
     content.forEach(function (n) {
       root.appendChild(n);
     });
-    root.appendChild(el('footer', { id: 'credit', class: 'credit', text: 'Developed by Gürkan Deveci' }));
+    root.appendChild(el('footer', { id: 'credit', class: 'credit', text: 'developed by Gürkan Deveci' }));
   }
 
   // ---------- Oturum ----------

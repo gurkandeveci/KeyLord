@@ -1,4 +1,4 @@
-importScripts('src/vault-crypto.js', 'src/store.js');
+importScripts('src/vault-crypto.js', 'src/store.js', 'src/release.js');
 
 // Araç çubuğu düğmesine (veya Alt+Shift+K kısayoluna) basılınca etkin sekmeye "KeyLord"
 // kutusunu ekler. Yalnızca activeTab izni kullanılır: eklenti, siz düğmeye basmadıkça hiçbir sayfaya erişmez.
@@ -61,6 +61,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'record:put': task = handleRecordPut(msg); break;
     case 'shot:capture': task = handleShot(msg, sender); break;
     case 'vault:open': task = handleOpen(); break;
+    case 'release:latest': task = handleLatest(); break;
     default:
       sendResponse({ ok: false, error: 'unknown' });
       return false;
@@ -116,4 +117,15 @@ async function handleShot(msg, sender) {
 async function handleOpen() {
   await chrome.tabs.create({ url: chrome.runtime.getURL('vault.html') });
   return { ok: true };
+}
+
+// GitHub'daki son sürüm ve commit numarası (kutunun altında gösterilir). Yalnızca herkese açık sürüm bilgisi
+// istenir; kullanıcıya ait hiçbir veri gönderilmez. Sonuç 1 saat yerel önbellekte tutulur.
+async function handleLatest() {
+  return KeyLordRelease.getLatest({
+    fetch: (url, init) => fetch(url, init),
+    cache: chrome.storage.local,
+    now: Date.now(),
+    installed: chrome.runtime.getManifest().version
+  });
 }
