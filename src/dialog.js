@@ -34,7 +34,7 @@
 
   var ERRORS = {
     'no-console':
-      'Bu sayfada vCenter konsolu bulunamadı. Kutuyu sanal makinenin web konsolu sekmesinde açın.',
+      'Bu sayfada Konsol bulunamadı. Kutuyu sanal makinenin web konsolu sekmesinde açın.',
     'not-connected': 'Konsol sanal makineye bağlı değil. Bağlantı kurulunca tekrar deneyin.',
     busy: 'Devam eden bir gönderim var.',
     'send-failed': 'Gönderim sırasında hata oluştu'
@@ -582,7 +582,7 @@
   function setReady(value) {
     ready = value;
     ui.pwTarget.textContent = ready
-      ? 'Hedef: vCenter konsolu (tuş vuruşu).'
+      ? 'Hedef: Konsol (tuş vuruşu).'
       : 'Hedef: bu sayfadaki boş şifre alanları.';
     setBusy(!!sending);
   }

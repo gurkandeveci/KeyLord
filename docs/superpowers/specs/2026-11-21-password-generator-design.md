@@ -10,7 +10,7 @@ gönderdikten sonra onu bir yere kaydetmeyi unuturlarsa şifre kaybolur.
 
 Bu özellik:
 1. 1Password'ün şifre üreticisi (https://1password.com/password-generator) gibi bir üretici sunar.
-2. Üretilen şifreyi açık sayfaya gönderir: vCenter konsoluna tuş vuruşu olarak **veya**
+2. Üretilen şifreyi açık sayfaya gönderir: Konsola tuş vuruşu olarak **veya**
    normal bir web sayfasındaki şifre alanını doldurarak.
 3. Her gönderimi **güvenlik ağı** olarak kaydeder: şifre, sayfa adresi, kullanıcı adı/not,
    tarih ve mümkünse sayfanın ekran görüntüsü. Kullanıcı sonra bulup şifreyi tekrar görebilir.

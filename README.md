@@ -1,6 +1,6 @@
 # KeyLord – Send Keys to Console
 
-Chrome'da açılan vCenter sanal makine web konsoluna, "KeyLord" kutusuna yazdığınız metni tek tek
+Chrome'da açılan sanal makine web konsoluna, "KeyLord" kutusuna yazdığınız metni tek tek
 tuş vuruşu olarak ileten Chrome eklentisi. Web konsolunda yapıştırma çalışmadığı için uzun komutları ve
 karmaşık parolaları elle yazma derdini ortadan kaldırır. Ayrıca rastgele şifre üretir, gönderdiği her şifreyi
 ana parolayla korunan şifreli bir kasaya kaydeder. Windows ve macOS'ta Chrome ile çalışır.
@@ -27,7 +27,7 @@ isterseniz `chrome://extensions/shortcuts` sayfasından atayın.
 
 ## Kullanım
 
-1. vCenter'da sanal makinenin **web konsolunu** açın ve bağlanmasını bekleyin.
+1. Sanal makinenin **web konsolunu** (Konsol) açın ve bağlanmasını bekleyin.
 2. KeyLord simgesine tıklayın (veya kısayola basın). Sayfanın sağ üstünde **KeyLord** kutusu açılır;
    durum satırında "Konsol bulundu, gönderime hazır." yazmalıdır.
 3. Konsolda imlecin doğru yerde olduğundan emin olun (ör. parola alanına tıklanmış olsun).
@@ -176,7 +176,7 @@ Bilgisayar değiştirirken, eşitleme kapalıysa veya eklenti kimliği değişti
 
 ## Nasıl çalışır
 
-vCenter web konsolu VMware'in WMKS bileşenini kullanır. Eklenti bu bileşeni sayfada bulur ve metni,
+Konsol sayfası, WMKS adlı bir konsol bileşeni kullanır. Eklenti bu bileşeni sayfada bulur ve metni,
 seçilen klavye düzenine göre ham tuş kodlarına (scancode) çevirip doğrudan sanal makineye yollar. Tuş kodu
 fiziksel tuşu temsil ettiği için hangi karakterin çıkacağını sanal makinenin kendi düzeni belirler; düzen
 seçimi bu yüzden önemlidir.
@@ -252,7 +252,7 @@ Testler (Node.js gerekir):
 node tests/run.js
 ```
 
-Gerçek vCenter olmadan denemek için sahte konsol sayfası:
+Gerçek bir Konsol olmadan denemek için sahte konsol sayfası:
 
 ```bash
 python3 -m http.server 8765 --bind 127.0.0.1

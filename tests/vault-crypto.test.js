@@ -34,7 +34,7 @@
   test('kasa: createVault + unlockVault + JSON gidiş-dönüş', async function () {
     var r = await V.createVault('doğru parola', OPTS);
     var key = await V.unlockVault(r.header, 'doğru parola', UNLOCK);
-    var obj = { site: 'vcenter', user: 'admin', n: 3, list: [1, 2] };
+    var obj = { site: 'konsol', user: 'admin', n: 3, list: [1, 2] };
     var env = await V.encryptJson(r.header, obj);
     assertEqual(env.v, 1);
     assertEqual(await V.decryptJson(key, env), obj);

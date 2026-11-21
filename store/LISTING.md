@@ -41,12 +41,12 @@ Bu komut `KeyLord-store.zip` oluşturur:
 
 **Kısa açıklama** (manifest'ten gelir, en çok 132 karakter):
 
-> vCenter web konsolundaki sanal makineye, yazdığınız metni tuş vuruşu olarak gönderir. Türkçe Q ve US klavye düzenlerini destekler.
+> Konsol ekranındaki sanal makineye, yazdığınız metni tuş vuruşu olarak gönderir. Türkçe Q ve US klavye düzenlerini destekler.
 
 **Ayrıntılı açıklama:**
 
 ```
-KeyLord, Chrome'da açtığınız sanal makine web konsollarına (ör. VMware vCenter HTML5 konsolu) yazdığınız
+KeyLord, Chrome'da açtığınız sanal makine web konsollarına (Konsol) yazdığınız
 metni tek tek tuş vuruşu olarak gönderir. Kopyala-yapıştır çalışmayan konsollarda uzun komutları ve
 parolaları elle yazmak zorunda kalmazsınız.
 
@@ -90,7 +90,7 @@ Kaynak kod ve belgeler: https://github.com/gurkandeveci/KeyLord
 **Tek amaç (Single purpose):**
 
 ```
-Sanal makine web konsollarına (ör. vCenter) metni ve parolaları tuş vuruşu olarak göndermek; bu amaçla
+Sanal makine web konsollarına (Konsol) metni ve parolaları tuş vuruşu olarak göndermek; bu amaçla
 üretilen parolaları, unutulmasınlar diye, kullanıcının ana parolasıyla şifrelenmiş bir geçmişte saklamak.
 ```
 

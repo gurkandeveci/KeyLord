@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<title>KeyLord – sahte vCenter konsolu</title>
+<title>KeyLord – sahte Konsol</title>
 <style>
   body { font: 14px/1.4 -apple-system, "Segoe UI", sans-serif; margin: 16px; max-width: 760px; }
   #wmksContainer canvas { width: 320px; height: 60px; background: #111; display: block; }
@@ -13,9 +13,9 @@
 </style>
 </head>
 <body>
-<h1>Sahte vCenter konsolu</h1>
+<h1>Sahte Konsol</h1>
 <p>
-  Gerçek vCenter olmadan eklentiyi denemek içindir. VMware'in WMKS bileşenindeki yapıyı taklit eder:
+  Gerçek bir Konsol olmadan eklentiyi denemek içindir. Konsoldaki WMKS bileşeninin yapısını taklit eder:
   jQuery UI bileşeni <code>#wmksContainer</code> üzerinde durur, içinde <code>_vncDecoder.onKeyVScan</code> vardır.
   Gelen ham tuş kodlarını, aşağıda seçilen "sanal makine klavye düzeni"ne göre ekrana yazar.
   Adrese <code>?jq=1.12.4&amp;ui=1.11.4</code> ekleyerek eski jQuery sürümleriyle de deneyebilirsiniz.
@@ -126,7 +126,7 @@
     }
   }
 
-  // ---- WMKS taklidi (VMware HTML Console SDK ile aynı yapı ve adlar) ----
+  // ---- WMKS taklidi (Konsol bileşeniyle aynı yapı ve adlar) ----
   function FakeDecoder() { this._serverInitialized = true; }
   FakeDecoder.prototype.onKeyVScan = function (a, b) {
     if (this._serverInitialized) {

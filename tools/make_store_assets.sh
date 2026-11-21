@@ -24,7 +24,7 @@ shot() { # url dosya genişlik yükseklik [alan-adı]
   echo "$OUT/$2 $(sips -g pixelWidth -g pixelHeight "$OUT/$2" | awk '/pixel/{printf "%s ", $2}')"
 }
 
-shot "store/assets-src/shot-console.html" screenshot-1-console.png 1280 800 vcenter.example.local
+shot "store/assets-src/shot-console.html" screenshot-1-console.png 1280 800 konsol.example.local
 shot "store/assets-src/shot-password.html" screenshot-2-password.png 1280 800 firewall-01.example.local
 shot "store/assets-src/shot-vault.html?iterations=1000&email=ornek@example.com" screenshot-3-vault.png 1280 800
 shot "store/assets-src/promo-small.html" promo-small-440x280.png 440 280

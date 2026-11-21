@@ -4,7 +4,7 @@ Son güncelleme / Last updated: 2026-11-21
 
 ## Türkçe
 
-KeyLord, Chrome'da açılan sanal makine web konsollarına (ör. vCenter) metni tuş vuruşu olarak gönderen ve
+KeyLord, Chrome'da açılan sanal makine web konsollarına metni tuş vuruşu olarak gönderen ve
 isteğe bağlı olarak rastgele şifre üretip bunların şifreli bir geçmişini tutan bir Chrome eklentisidir.
 
 **Toplanan ve işlenen veriler**
@@ -38,7 +38,7 @@ eşitlenmiş veriler Chrome eşitleme verilerinizle birlikte Google hesabınızd
 
 ## English
 
-KeyLord is a Chrome extension that types text into virtual machine web consoles (e.g. vCenter) as keystrokes
+KeyLord is a Chrome extension that types text into virtual machine web consoles as keystrokes
 and can optionally generate random passwords and keep an encrypted history of them.
 
 **Data handled**

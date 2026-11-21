@@ -1,4 +1,4 @@
-// Sayfanın kendi JavaScript dünyasında (MAIN world) çalışır: vCenter web konsolunun WMKS nesnesini
+// Sayfanın kendi JavaScript dünyasında (MAIN world) çalışır: Konsol sayfasının WMKS nesnesini
 // bulur ve tuş kodlarını doğrudan sanal makineye yollar. Diyalogla CustomEvent üzerinden konuşur.
 (function (g) {
   'use strict';
