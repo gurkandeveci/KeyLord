@@ -2,6 +2,7 @@
 (function () {
   var V = globalThis.KeyLordVaultCrypto;
   var OPTS = { iterations: 1000 }; // testlerde hız için düşük tur
+  var UNLOCK = { minIterations: 1000 }; // düşük turlu test başlıklarını açmak için alt sınır
 
   async function rejects(promise, message, label) {
     var err = null;
@@ -32,7 +33,7 @@
 
   test('kasa: createVault + unlockVault + JSON gidiş-dönüş', async function () {
     var r = await V.createVault('doğru parola', OPTS);
-    var key = await V.unlockVault(r.header, 'doğru parola');
+    var key = await V.unlockVault(r.header, 'doğru parola', UNLOCK);
     var obj = { site: 'vcenter', user: 'admin', n: 3, list: [1, 2] };
     var env = await V.encryptJson(r.header, obj);
     assertEqual(env.v, 1);
@@ -64,7 +65,7 @@
 
   test('kasa: yanlış parola → wrong-password', async function () {
     var r = await V.createVault('doğru', OPTS);
-    await rejects(V.unlockVault(r.header, 'yanlış'), 'wrong-password');
+    await rejects(V.unlockVault(r.header, 'yanlış', UNLOCK), 'wrong-password');
   });
 
   test('kasa: 1 KB rastgele bayt korunur', async function () {
@@ -122,11 +123,73 @@
 
   test('kasa: exportPrivateKey → importPrivateKey ile çözme', async function () {
     var r = await V.createVault('p', OPTS);
-    var key = await V.unlockVault(r.header, 'p');
+    var key = await V.unlockVault(r.header, 'p', UNLOCK);
     var b64 = await V.exportPrivateKey(key);
     assertTrue(typeof b64 === 'string' && b64.length > 0, 'base64 metin');
     var key2 = await V.importPrivateKey(b64);
     var env = await V.encryptJson(r.header, { x: 'y' });
     assertEqual(await V.decryptJson(key2, env), { x: 'y' });
+  });
+
+  function cloneHeader(h) {
+    return JSON.parse(JSON.stringify(h));
+  }
+
+  test('kasa: açık anahtarı değiştirilmiş başlık → bad-header', async function () {
+    var a = await V.createVault('p', OPTS);
+    var b = await V.createVault('p', OPTS);
+    var h = cloneHeader(a.header);
+    h.publicKey = cloneHeader(b.header).publicKey;
+    await rejects(V.unlockVault(h, 'p', UNLOCK), 'bad-header', 'takas');
+  });
+
+  test('kasa: varsayılan alt sınırla düşük tur reddedilir', async function () {
+    var r = await V.createVault('p', OPTS);
+    await rejects(V.unlockVault(r.header, 'p'), 'bad-header', '1000 tur, varsayılan sınır');
+    var h = cloneHeader(r.header);
+    h.kdf.iterations = 1;
+    await rejects(V.unlockVault(h, 'p'), 'bad-header', '1 tur');
+    await rejects(V.unlockVault(h, 'p', UNLOCK), 'bad-header', '1 tur, test sınırı');
+    h.kdf.iterations = 5000001;
+    await rejects(V.unlockVault(h, 'p', UNLOCK), 'bad-header', 'üst sınır');
+    h.kdf.iterations = 1000.5;
+    await rejects(V.unlockVault(h, 'p', UNLOCK), 'bad-header', 'tam sayı değil');
+  });
+
+  test('kasa: biçimsiz başlık → bad-header', async function () {
+    var r = await V.createVault('p', OPTS);
+    function mut(fn) {
+      var h = cloneHeader(r.header);
+      fn(h);
+      return h;
+    }
+    await rejects(V.unlockVault(mut(function (h) { h.v = 2; }), 'p', UNLOCK), 'bad-header', 'v:2');
+    await rejects(V.unlockVault(mut(function (h) { h.kdf.salt = btoa('kisa'); }), 'p', UNLOCK), 'bad-header', 'kısa tuz');
+    await rejects(V.unlockVault(mut(function (h) { h.kdf.salt = '!!!'; }), 'p', UNLOCK), 'bad-header', 'çöp tuz');
+    await rejects(V.unlockVault(mut(function (h) { delete h.kdf; }), 'p', UNLOCK), 'bad-header', 'kdf yok');
+    await rejects(V.unlockVault(mut(function (h) { delete h.publicKey; }), 'p', UNLOCK), 'bad-header', 'açık anahtar yok');
+    await rejects(V.unlockVault(mut(function (h) { h.wrappedPrivateKey = null; }), 'p', UNLOCK), 'bad-header', 'sarılı anahtar yok');
+    await rejects(V.unlockVault(null, 'p', UNLOCK), 'bad-header', 'null');
+    await rejects(V.unlockVault('x', 'p', UNLOCK), 'bad-header', 'metin');
+  });
+
+  test('kasa: validateHeader geçerli başlığı kabul eder', async function () {
+    var r = await V.createVault('p', OPTS);
+    assertTrue(V.validateHeader(r.header, UNLOCK) === r.header, 'aynı başlık döner');
+    var threw = null;
+    try { V.validateHeader(r.header); } catch (e) { threw = e; }
+    assertEqual(threw && threw.message, 'bad-header', 'varsayılan alt sınır');
+  });
+
+  test('kasa: yeni zarflar kasa kimliğini (vid) taşır; vid olmayan eski zarf da çözülür', async function () {
+    var r = await V.createVault('p', OPTS);
+    var env = await V.encryptJson(r.header, { a: 1 });
+    assertEqual(env.vid, r.header.vaultId, 'json vid');
+    var benv = await V.encryptBytes(r.header, new Uint8Array([7]));
+    assertEqual(benv.vid, r.header.vaultId, 'bytes vid');
+    var old = { v: env.v, epk: env.epk, iv: env.iv, ct: env.ct };
+    assertEqual(await V.decryptJson(r.privateKey, old), { a: 1 }, 'vid yok');
+    var other = { v: env.v, vid: 'baska', epk: env.epk, iv: env.iv, ct: env.ct };
+    assertEqual(await V.decryptJson(r.privateKey, other), { a: 1 }, 'vid çözmede yok sayılır');
   });
 })();

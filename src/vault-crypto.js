@@ -6,6 +6,7 @@
   if (g.KeyLordVaultCrypto) return; // çift yükleme koruması
 
   var DEFAULT_ITERATIONS = 600000; // PBKDF2-SHA256 tur sayısı
+  var MAX_ITERATIONS = 5000000; // başlıktaki tur sayısının üst sınırı (aşırı yük saldırısına karşı)
   var SALT_BYTES = 16;
   var IV_BYTES = 12;
   var CURVE = { name: 'ECDH', namedCurve: 'P-256' };
@@ -113,7 +114,46 @@
     return { header: header, privateKey: await importPkcs8(pkcs8) };
   }
 
-  async function unlockVault(header, password) {
+  function isObject(x) {
+    return x !== null && typeof x === 'object' && !Array.isArray(x);
+  }
+
+  function badHeader() {
+    return new Error('bad-header');
+  }
+
+  function b64Length(b64) {
+    try {
+      return fromB64(b64).length;
+    } catch (e) {
+      return -1;
+    }
+  }
+
+  // Kasa başlığının biçimini doğrular (eşitlenen depodan geldiği için güvenilmez).
+  // options.minIterations: tur alt sınırı; varsayılan DEFAULT_ITERATIONS (yalnızca testler düşürür).
+  // Uymazsa 'bad-header' fırlatır; geçerliyse başlığı döner.
+  function validateHeader(header, options) {
+    var o = options || {};
+    var min = o.minIterations > 0 ? o.minIterations : DEFAULT_ITERATIONS;
+    var h = header;
+    if (!isObject(h) || h.v !== 1) throw badHeader();
+    if (typeof h.vaultId !== 'string' || !h.vaultId) throw badHeader();
+    var kdf = h.kdf;
+    if (!isObject(kdf)) throw badHeader();
+    var it = kdf.iterations;
+    if (typeof it !== 'number' || Math.floor(it) !== it || it < min || it > MAX_ITERATIONS) throw badHeader();
+    if (b64Length(kdf.salt) !== SALT_BYTES) throw badHeader();
+    var pub = h.publicKey;
+    if (!isObject(pub) || pub.kty !== 'EC' || pub.crv !== 'P-256') throw badHeader();
+    if (typeof pub.x !== 'string' || typeof pub.y !== 'string' || !pub.x || !pub.y) throw badHeader();
+    var w = h.wrappedPrivateKey;
+    if (!isObject(w) || b64Length(w.iv) !== IV_BYTES || !(b64Length(w.ct) > 0)) throw badHeader();
+    return h;
+  }
+
+  async function unlockVault(header, password, options) {
+    validateHeader(header, options);
     var kdf = header.kdf;
     var wrapKey = await passwordKey(password, fromB64(kdf.salt), kdf.iterations);
     var pkcs8;
@@ -126,7 +166,17 @@
     } catch (e) {
       throw new Error('wrong-password');
     }
-    return importPkcs8(pkcs8);
+    var key;
+    var jwk;
+    try {
+      key = await importPkcs8(pkcs8);
+      jwk = await subtle().exportKey('jwk', key);
+    } catch (e) {
+      throw badHeader();
+    }
+    // Gizli anahtar başlıktaki açık anahtarla eşleşmeli; yoksa kayıtlar başka bir anahtara yazılır.
+    if (jwk.x !== header.publicKey.x || jwk.y !== header.publicKey.y) throw badHeader();
+    return key;
   }
 
   async function encryptBytes(header, bytes) {
@@ -137,7 +187,10 @@
     var iv = randomBytes(IV_BYTES);
     var ct = await subtle().encrypt({ name: 'AES-GCM', iv: iv }, key, bytes);
     var epk = await subtle().exportKey('raw', eph.publicKey); // 65 bayt, sıkıştırılmamış
-    return { v: 1, epk: toB64(epk), iv: toB64(iv), ct: toB64(ct) };
+    var env = { v: 1, epk: toB64(epk), iv: toB64(iv), ct: toB64(ct) };
+    // vid: zarfın hangi kasaya yazıldığı (düz metin, gizli değil). Çözmede kullanılmaz; eski zarflarda yoktur.
+    if (typeof header.vaultId === 'string' && header.vaultId) env.vid = header.vaultId;
+    return env;
   }
 
   async function decryptBytes(privateKey, envelope) {
@@ -180,6 +233,7 @@
     DEFAULT_ITERATIONS: DEFAULT_ITERATIONS,
     createVault: createVault,
     unlockVault: unlockVault,
+    validateHeader: validateHeader,
     encryptJson: encryptJson,
     encryptBytes: encryptBytes,
     decryptJson: decryptJson,
