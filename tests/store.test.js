@@ -222,4 +222,71 @@
     try { await t.store.putRecord('c6', small); } catch (e) { threw = true; }
     assertTrue(threw);
   });
+
+  test('depo: putHeader başlığı vault:<id> olarak da yazar ve yerelde saklar', async function () {
+    var t = mk();
+    await t.store.putHeader({ v: 1, vaultId: 'A', n: 1 });
+    assertEqual(t.sync.data['vault'].vaultId, 'A');
+    assertEqual(t.sync.data['vault:A'].n, 1);
+    assertEqual(t.local.data['vaults'].A.n, 1);
+    await t.store.putHeader({ v: 1, vaultId: 'B', n: 2 });
+    assertEqual(t.sync.data['vault'].vaultId, 'B');
+    assertTrue(!!t.sync.data['vault:A'], 'eski kasa başlığı sync\'te kalır');
+    assertEqual(Object.keys(t.local.data['vaults']).sort(), ['A', 'B']);
+  });
+
+  test('depo: listHeaders sync vault:* ve yerel kopyayı birleştirir (tekil)', async function () {
+    var t = mk();
+    assertEqual(await t.store.listHeaders(), []);
+    t.sync.data['vault:A'] = { v: 1, vaultId: 'A', createdAt: 2 };
+    t.local.data['vaults'] = { A: { v: 1, vaultId: 'A', createdAt: 2 }, C: { v: 1, vaultId: 'C', createdAt: 1 } };
+    t.sync.data['vault'] = { v: 1, vaultId: 'B', createdAt: 3 };
+    t.sync.data['vault:bozuk'] = 'x';
+    var ids = (await t.store.listHeaders()).map(function (h) { return h.vaultId; }).sort();
+    assertEqual(ids, ['A', 'B', 'C']);
+  });
+
+  test('depo: getHeader gördüğü başlığı yerelde saklar', async function () {
+    var t = mk();
+    t.sync.data['vault'] = { v: 1, vaultId: 'X', n: 5 }; // 1.0'dan kalma: yalnızca "vault" anahtarı
+    var h = await t.store.getHeader();
+    assertEqual(h.vaultId, 'X');
+    assertEqual(t.local.data['vaults'].X.n, 5);
+    delete t.sync.data['vault']; // eşitleme başka cihazın kasasıyla ezse bile eski başlık bilinir
+    assertEqual((await t.store.listHeaders()).map(function (x) { return x.vaultId; }), ['X']);
+  });
+
+  test('depo: getHeader yerel yazma hatasında yine başlığı döner', async function () {
+    var t = mk();
+    t.sync.data['vault'] = { v: 1, vaultId: 'Y' };
+    t.local.failAll = true;
+    assertEqual((await t.store.getHeader()).vaultId, 'Y');
+  });
+
+  test('depo: listRecords sıradaki yazmalardan sonra okur', async function () {
+    var t = mk();
+    t.sync.failAll = true;
+    await t.store.putRecord('s1', small);
+    t.sync.failAll = false;
+    // retryPending sırasında listRecords çağrılsa bile kayıt kaybolmaz (ya bekleyen ya eşitlenmiş görünür).
+    var listed = null;
+    var p1 = t.store.retryPending();
+    var p2 = t.store.listRecords().then(function (l) { listed = l; });
+    await Promise.all([p1, p2]);
+    assertEqual(listed.length, 1);
+    assertEqual(listed[0].synced, true, 'retryPending bittikten sonra okundu');
+  });
+
+  test('depo: getHeader yerel kopyadaki aynı kimlikli başlığı ezmez, putHeader ezer', async function () {
+    var t = mk();
+    await t.store.putHeader({ v: 1, vaultId: 'Z', n: 1 });
+    t.sync.data['vault'] = { v: 1, vaultId: 'Z', n: 99 }; // eşitlemeden değiştirilmiş başlık
+    assertEqual((await t.store.getHeader()).n, 99);
+    assertEqual(t.local.data['vaults'].Z.n, 1, 'ilk görülen kalır');
+    var z = (await t.store.listHeaders()).filter(function (h) { return h.vaultId === 'Z'; });
+    assertEqual(z.length, 1);
+    assertEqual(z[0].n, 1, 'listHeaders yerel kopyayı tercih eder');
+    await t.store.putHeader({ v: 1, vaultId: 'Z', n: 2 });
+    assertEqual(t.local.data['vaults'].Z.n, 2, 'putHeader günceller');
+  });
 })();

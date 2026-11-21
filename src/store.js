@@ -5,7 +5,9 @@
   'use strict';
   if (g.KeyLordStore) return; // çift yükleme koruması
 
-  var HEADER_KEY = 'vault';
+  var HEADER_KEY = 'vault'; // geçerli kasa başlığı (sync)
+  var HEADER_PREFIX = 'vault:'; // her kasanın başlığı, kimliğiyle (sync) – eski kasaların kayıtlarını açmak için
+  var LOCAL_HEADERS = 'vaults'; // bu cihazın gördüğü başlıklar { vaultId: başlık } (local)
   var REC = 'rec:';
   var PENDING = 'pending:';
   var SHOT = 'shot:';
@@ -42,14 +44,72 @@
       return out;
     }
 
+    function hasVaultId(h) {
+      return h !== null && typeof h === 'object' && typeof h.vaultId === 'string' && h.vaultId.length > 0;
+    }
+
+    // Başlığı yerel kopyaya ekler. overwrite false ise aynı kimlik zaten varsa dokunmaz
+    // (ilk görülen kalır: eşitlemeden gelen değiştirilmiş başlık yerel kopyayı ezmez).
+    async function mirrorHeader_(header, overwrite) {
+      if (!hasVaultId(header)) return;
+      var map = await getOne(local, LOCAL_HEADERS);
+      var has = map && typeof map === 'object' && Object.prototype.hasOwnProperty.call(map, header.vaultId);
+      if (has && (!overwrite || JSON.stringify(map[header.vaultId]) === JSON.stringify(header))) {
+        return; // zaten var; gereksiz yazma yok
+      }
+      var next = {};
+      if (map && typeof map === 'object') {
+        for (var k in map) if (Object.prototype.hasOwnProperty.call(map, k)) next[k] = map[k];
+      }
+      next[header.vaultId] = header;
+      var o = {};
+      o[LOCAL_HEADERS] = next;
+      await local.set(o);
+    }
+
+    // Gördüğü başlığı yerelde de saklar: eşitleme başka cihazın kasasıyla ezse bile eski kasa bilinir.
     async function getHeader() {
-      return getOne(sync, HEADER_KEY);
+      var h = await getOne(sync, HEADER_KEY);
+      if (hasVaultId(h)) {
+        try {
+          await serial(function () { return mirrorHeader_(h, false); });
+        } catch (e) {
+          /* yerel kopya yazılamadı; başlık yine döner */
+        }
+      }
+      return h;
     }
 
     async function putHeader_(header) {
       var o = {};
       o[HEADER_KEY] = header;
+      if (hasVaultId(header)) o[HEADER_PREFIX + header.vaultId] = header;
       await sync.set(o);
+      try {
+        await mirrorHeader_(header, true);
+      } catch (e) {
+        /* sync'e yazıldı; yerel kopya sonraki getHeader'da yeniden denenir */
+      }
+    }
+
+    // Bilinen tüm başlıklar: yerel kopya, sync "vault" ve sync "vault:*"; kimliğe göre tekil (yerel öncelikli).
+    async function listHeaders() {
+      var all = await sync.get(null);
+      var map = await getOne(local, LOCAL_HEADERS);
+      var out = {};
+      function add(h) {
+        if (hasVaultId(h) && !Object.prototype.hasOwnProperty.call(out, h.vaultId)) out[h.vaultId] = h;
+      }
+      if (map && typeof map === 'object') {
+        for (var m in map) if (Object.prototype.hasOwnProperty.call(map, m)) add(map[m]);
+      }
+      add(all && all[HEADER_KEY]);
+      for (var k in all) {
+        if (Object.prototype.hasOwnProperty.call(all, k) && k.indexOf(HEADER_PREFIX) === 0) add(all[k]);
+      }
+      return Object.keys(out).map(function (id) {
+        return out[id];
+      });
     }
 
     // Önce sync'e dener; hata olursa local'e bekleyen olarak yazar (kayıp olmaz).
@@ -101,7 +161,7 @@
     }
 
     // Aynı id'de bekleyen öncelikli; id'ye göre sıralı (deterministik).
-    async function listRecords() {
+    async function listRecords_() {
       var synced = await byPrefix(sync, REC);
       var pend = await byPrefix(local, PENDING);
       var map = {};
@@ -125,7 +185,7 @@
       await local.set(o);
     }
 
-    async function getShot(id) {
+    async function getShot_(id) {
       return getOne(local, SHOT + id);
     }
 
@@ -140,10 +200,14 @@
     function retryPending() { return serial(retryPending_); }
     function deleteRecord(id) { return serial(function () { return deleteRecord_(id); }); }
     function putShot(id, e) { return serial(function () { return putShot_(id, e); }); }
+    // Okumalar da sıraya girer: retryPending yarıdayken okunan liste bir kaydı kaçırmasın.
+    function listRecords() { return serial(listRecords_); }
+    function getShot(id) { return serial(function () { return getShot_(id); }); }
 
     return {
       getHeader: getHeader,
       putHeader: putHeader,
+      listHeaders: listHeaders,
       putRecord: putRecord,
       retryPending: retryPending,
       listRecords: listRecords,
