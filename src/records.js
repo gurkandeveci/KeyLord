@@ -42,6 +42,23 @@
     return copy;
   }
 
+  // Sonuç önceliği: bir kez gönderilmiş şifre, sonraki başarısız denemeyle "Başarısız" görünmesin.
+  var STATUS_RANK = { sent: 5, partial: 4, copied: 3, pending: 2, failed: 1 };
+
+  // Kaydın olaylarındaki en iyi durum (sent > partial > copied > pending > failed); olay yoksa record.status.
+  function bestStatus(record) {
+    if (!record) return undefined;
+    var best = null;
+    var events = Array.isArray(record.events) ? record.events : [];
+    for (var i = 0; i < events.length; i++) {
+      var st = events[i] && events[i].status;
+      if (Object.prototype.hasOwnProperty.call(STATUS_RANK, st) && (!best || STATUS_RANK[st] > STATUS_RANK[best])) {
+        best = st;
+      }
+    }
+    return best || record.status;
+  }
+
   // Karakter karakter gönderim sonucu.
   function runStatus(r) {
     if (r.total === 0) return 'failed';
@@ -60,6 +77,7 @@
     withEvent: withEvent,
     runStatus: runStatus,
     fillStatus: fillStatus,
+    bestStatus: bestStatus,
     STATUS_LABELS: STATUS_LABELS
   };
 })(globalThis);

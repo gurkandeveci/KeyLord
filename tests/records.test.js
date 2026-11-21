@@ -57,4 +57,30 @@
     assertEqual(R.STATUS_LABELS.failed, 'Başarısız');
     assertEqual(R.STATUS_LABELS.copied, 'Kopyalandı');
   });
+
+  test('kayıt: bestStatus olaylardaki en iyi sonucu döner', function () {
+    function rec(statuses, top) {
+      return {
+        status: top || statuses[statuses.length - 1],
+        events: statuses.map(function (st, i) { return { at: i, method: 'usb', status: st }; })
+      };
+    }
+    assertEqual(R.bestStatus(rec(['pending', 'sent', 'failed'])), 'sent', 'gönderildi sonra başarısız');
+    assertEqual(R.bestStatus(rec(['pending', 'copied', 'failed'])), 'copied');
+    assertEqual(R.bestStatus(rec(['pending', 'partial', 'copied'])), 'partial');
+    assertEqual(R.bestStatus(rec(['pending', 'failed'])), 'pending');
+    assertEqual(R.bestStatus(rec(['failed'])), 'failed');
+    assertEqual(R.bestStatus(rec(['pending', 'sent', 'partial', 'copied'])), 'sent');
+    assertEqual(R.bestStatus({ status: 'sent', events: [] }), 'sent', 'olay yok: status');
+    assertEqual(R.bestStatus({ status: 'copied' }), 'copied', 'events yok');
+    assertEqual(R.bestStatus({ status: 'failed', events: [null, { status: 'bilinmeyen' }] }), 'failed', 'tanınmayan olay');
+    assertEqual(R.bestStatus(null), undefined, 'kayıt yok');
+  });
+
+  test('kayıt: withEvent son olayı status yapar (değişmedi)', function () {
+    var r = R.newRecord({ url: 'u', host: 'h', username: 'a', password: 'p', method: 'usb' }, 1, 'i');
+    var r2 = R.withEvent(R.withEvent(r, { at: 2, method: 'usb', status: 'sent' }), { at: 3, method: 'usb', status: 'failed' });
+    assertEqual(r2.status, 'failed');
+    assertEqual(R.bestStatus(r2), 'sent');
+  });
 })();
