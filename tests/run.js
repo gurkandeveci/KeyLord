@@ -11,7 +11,9 @@ var loadFile =
 loadFile('tests/harness.js');
 loadFile('src/layouts.js');
 loadFile('src/engine.js');
+loadFile('src/generator.js');
 loadFile('tests/layouts.test.js');
 loadFile('tests/engine.test.js');
+loadFile('tests/generator.test.js');
 
 runTests();
