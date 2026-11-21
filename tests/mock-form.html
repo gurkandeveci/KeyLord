@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>KeyLord sahte form (şifre doldurma)</title>
+<script src="../src/fieldfill.js"></script>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 24px; max-width: 640px; }
+  form { border: 1px solid #ccc; padding: 12px; margin-bottom: 16px; }
+  label { display: block; margin: 6px 0; }
+</style>
+</head>
+<body>
+<h1>Şifre doldurma deneme sayfası</h1>
+
+<form id="formA">
+  <h2>A) Kayıt formu</h2>
+  <label>Kullanıcı adı <input id="a-user" type="text" name="username"></label>
+  <label>Yeni şifre <input id="a-new" type="password" name="new"></label>
+  <label>Şifre tekrar <input id="a-repeat" type="password" name="repeat"></label>
+</form>
+
+<form id="formB">
+  <h2>B) Şifre değiştirme formu</h2>
+  <label>Kullanıcı adı <input id="b-user" type="text" name="username"></label>
+  <label>Mevcut şifre <input id="b-current" type="password" name="current" value="eski-sifre"></label>
+  <label>Yeni şifre <input id="b-new" type="password" name="new"></label>
+  <label>Şifre tekrar <input id="b-repeat" type="password" name="repeat"></label>
+  <input id="b-hidden" type="password" name="hidden" style="display:none">
+  <label>Salt okunur şifre <input id="b-readonly" type="password" name="ro" readonly></label>
+</form>
+
+<h3>Olay sayıları</h3>
+<code id="events">-</code>
+<h3>Değerler (uzunluk)</h3>
+<pre id="values">-</pre>
+
+<script>
+  // React benzeri dinleyici: input olaylarını sayar, doluluk uzunluklarını gösterir.
+  var counts = {};
+  var pw = document.querySelectorAll('input[type=password]');
+  function render() {
+    document.getElementById('events').textContent = JSON.stringify(counts);
+    var lines = [];
+    pw.forEach(function (el) {
+      lines.push(el.id + ': ' + (el.value === '' ? 'boş' : 'dolu (' + el.value.length + ')'));
+    });
+    document.getElementById('values').textContent = lines.join('\n');
+  }
+  pw.forEach(function (el) {
+    counts[el.id] = 0;
+    el.addEventListener('input', function () {
+      counts[el.id]++;
+      render();
+    });
+  });
+  render();
+</script>
+</body>
+</html>
