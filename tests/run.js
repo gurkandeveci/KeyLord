@@ -13,10 +13,14 @@ loadFile('src/layouts.js');
 loadFile('src/engine.js');
 loadFile('src/generator.js');
 loadFile('src/vault-crypto.js');
+loadFile('src/vault-session.js');
 loadFile('tests/layouts.test.js');
 loadFile('tests/engine.test.js');
 loadFile('tests/generator.test.js');
 // WebCrypto gerektiren testler yalnızca crypto.subtle varsa (jsc'de atlanır).
-if (globalThis.crypto && globalThis.crypto.subtle) loadFile('tests/vault-crypto.test.js');
+if (globalThis.crypto && globalThis.crypto.subtle) {
+  loadFile('tests/vault-crypto.test.js');
+  loadFile('tests/vault-session.test.js');
+}
 
 runTests();
