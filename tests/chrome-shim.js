@@ -140,6 +140,7 @@
   var bg = {
     failPut: false,
     failShot: false,
+    putDelay: 0,
     opened: 0,
     captures: 0,
     messages: [], // yalnızca { type, id } – kayıt içeriği (şifre) tutulmaz
@@ -166,6 +167,7 @@
         if (typeof msg.id !== 'string' || !msg.id || !msg.record || typeof msg.record !== 'object') {
           return { ok: false, error: 'bad-request' };
         }
+        if (bg.putDelay) await new Promise(function (r) { setTimeout(r, bg.putDelay); });
         if (bg.failPut) return { ok: false, error: 'shim-fail' };
         header = await store.getHeader();
         if (!header) return { ok: false, error: 'no-vault' };
@@ -222,6 +224,10 @@
     // true: record:put { ok:false } döner (kayıt yazılamadı senaryosu).
     failRecordPut: function (on) {
       bg.failPut = !!on;
+    },
+    // record:put yanıtını ms kadar geciktirir (kayıt yazılırken kutuyu kapatma senaryosu); 0 kapatır.
+    delayRecordPut: function (ms) {
+      bg.putDelay = Math.max(0, Number(ms) || 0);
     },
     // true: shot:capture { ok:false } döner.
     failShot: function (on) {

@@ -135,6 +135,8 @@
   var pwBusy = false; // kayıt yazımı / gönderim / görüntü sürüyor
   var vaultState = 'unknown'; // 'unknown' | 'yes' | 'no'
   var focusBeforeOpen = null; // kutu odak almadan önce sayfada odaklı öğe (alan doldurma için)
+  // Süren gönder/kopyala işlemi: { aborted }. hide() iptal eder; eski işlemin sonucu yeni şifrenin altına yazılmaz.
+  var activeRun = null;
 
   // ---------- Ayarların saklanması ----------
 
@@ -764,15 +766,37 @@
     return rec;
   }
 
-  function endPw(text, kind) {
+  function newRun(cur) {
+    activeRun = { aborted: false, cur: cur };
+    return activeRun;
+  }
+
+  // Durum yalnızca bu işlem hâlâ en son işlemse, kutu görünürse ve aynı şifre hâlâ gösteriliyorsa yazılır:
+  // eski işlemin sonucu yeni şifrenin altında görünmez. closeNote: "kutu kapatıldı" bildirimi (şifreye ait değil).
+  function pwSay(run, text, kind, closeNote) {
+    if (run !== activeRun || host.style.display === 'none') return;
+    if (!closeNote && current !== run.cur) return;
+    setPwStatus(text, kind);
+  }
+
+  function endPw(run, text, kind, closeNote) {
     pwBusy = false;
     refreshPasswordControls();
-    setPwStatus(text, kind);
+    pwSay(run, text, kind, closeNote);
+  }
+
+  // Kutu kayıt yazılırken kapatıldı: hiçbir şey gönderilmez/kopyalanmaz, olay "başarısız" işlenir.
+  function abortRun(cur, run, method) {
+    cur.record = nextRecord(cur, method, 'failed');
+    return putRecord(cur.record).then(function () {
+      endPw(run, 'Kutu kapatıldı; gönderilmedi.', 'error', true);
+    });
   }
 
   function sendPassword() {
     if (pwBusy || sending || !current || vaultState !== 'yes') return;
     var cur = current;
+    var run = newRun(cur);
     var useConsole = ready;
     var method = useConsole ? 'usb' : 'fill';
     pwBusy = true;
@@ -782,8 +806,9 @@
     // 1) Önce kayıt: yazılamazsa hiçbir şey gönderilmez.
     var pending = nextRecord(cur, method, 'pending');
     putRecord(pending).then(function (ok) {
-      if (!ok) return endPw('Kayıt yazılamadı; gönderilmedi.', 'error');
+      if (!ok) return endPw(run, 'Kayıt yazılamadı; gönderilmedi.', 'error');
       cur.record = pending;
+      if (run.aborted) return abortRun(cur, run, method);
 
       // 2) Gönderim.
       if (useConsole) {
@@ -793,16 +818,16 @@
           appendEnter: settings.appendEnter
         });
         if (plan.unsupported.length) {
-          return finishSend(cur, method, 'failed', {
+          return finishSend(cur, run, method, 'failed', {
             text: 'Seçili klavye düzeninde yazılamayan karakter var. Hiçbir şey gönderilmedi.'
           });
         }
         start(plan.strokes, false, function (result, errorText) {
-          finishSend(cur, method, R.runStatus(result), { result: result, errorText: errorText });
+          finishSend(cur, run, method, R.runStatus(result), { result: result, errorText: errorText });
         });
       } else {
         var filled = F.fillPassword(document, focusBeforeOpen, cur.password);
-        finishSend(cur, method, R.fillStatus(filled), { filled: filled });
+        finishSend(cur, run, method, R.fillStatus(filled), { filled: filled });
       }
     });
   }
@@ -822,17 +847,18 @@
     return (info.errorText ? info.errorText + '. ' : 'Hiçbir tuş gönderilmedi. ') + 'Geçmişe "Başarısız" olarak kaydedildi.';
   }
 
-  // 3) Sonuç kayda işlenir; gönderildiyse/yarımsa ekran görüntüsü alınır.
-  function finishSend(cur, method, status, info) {
+  // 3) Sonuç kayda işlenir; gönderildiyse/yarımsa ekran görüntüsü alınır
+  // (kutu bu arada kapatıldıysa görüntü alınmaz).
+  function finishSend(cur, run, method, status, info) {
     cur.record = nextRecord(cur, method, status);
     var text = resultText(method, status, info);
     var kind = status === 'sent' ? 'ok' : 'error';
     putRecord(cur.record).then(function (ok) {
       if (!ok) text += ' Sonuç kayda işlenemedi (kayıt "Bekliyor" kalabilir).';
-      if (status !== 'sent' && status !== 'partial') return endPw(text, kind);
-      setPwStatus('Ekran görüntüsü alınıyor…');
+      if ((status !== 'sent' && status !== 'partial') || run.aborted) return endPw(run, text, kind);
+      pwSay(run, 'Ekran görüntüsü alınıyor…');
       return capture(cur).then(function (note) {
-        endPw(text + note, kind);
+        endPw(run, text + note, kind);
       });
     });
   }
@@ -886,21 +912,23 @@
       return;
     }
     var cur = current;
+    var run = newRun(cur);
     pwBusy = true;
     refreshPasswordControls();
     setPwStatus('Kaydediliyor…');
     var rec = nextRecord(cur, 'copy', 'copied');
     putRecord(rec).then(function (ok) {
-      if (!ok) return endPw('Kayıt yazılamadı; kopyalanmadı.', 'error');
+      if (!ok) return endPw(run, 'Kayıt yazılamadı; kopyalanmadı.', 'error');
       cur.record = rec;
+      if (run.aborted) return abortRun(cur, run, 'copy');
       return clip.writeText(cur.password).then(
         function () {
-          endPw('Şifre panoya kopyalandı ve geçmişe kaydedildi.', 'ok');
+          endPw(run, 'Şifre panoya kopyalandı ve geçmişe kaydedildi.', 'ok');
         },
         function () {
           cur.record = nextRecord(cur, 'copy', 'failed');
           return putRecord(cur.record).then(function () {
-            endPw('Panoya kopyalanamadı.', 'error');
+            endPw(run, 'Panoya kopyalanamadı.', 'error');
           });
         }
       );
@@ -1042,6 +1070,7 @@
 
   function hide() {
     if (sending) command({ type: 'cancel' });
+    if (activeRun) activeRun.aborted = true; // kayıt yazımı sürerken kapatılırsa gönderim yapılmaz
     clearTimeout(detectTimer);
     ui.text.value = ''; // Kapatılan kutuda parola kalmasın.
     // Üretilen şifre ve düz kaydı da bellekten bırakılır; kutu yeniden açılınca yeni şifre üretilir.
