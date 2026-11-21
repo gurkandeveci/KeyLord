@@ -16,6 +16,7 @@ loadFile('src/vault-crypto.js');
 loadFile('src/vault-session.js');
 loadFile('src/records.js');
 loadFile('src/store.js');
+loadFile('src/backup.js');
 loadFile('tests/layouts.test.js');
 loadFile('tests/engine.test.js');
 loadFile('tests/generator.test.js');
@@ -25,6 +26,7 @@ loadFile('tests/store.test.js');
 if (globalThis.crypto && globalThis.crypto.subtle) {
   loadFile('tests/vault-crypto.test.js');
   loadFile('tests/vault-session.test.js');
+  loadFile('tests/backup.test.js');
 }
 
 runTests();
