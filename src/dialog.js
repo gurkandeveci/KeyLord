@@ -86,6 +86,8 @@
     '.field label { white-space:nowrap; }',
     '.field input[type=range] { flex:1 1 auto; min-width:0; accent-color:var(--accent); }',
     '.value { min-width:2.2em; text-align:right; font-variant-numeric:tabular-nums; }',
+    'input.num { flex:0 0 auto; width:4.2em; padding:3px 4px; border:1px solid var(--line); border-radius:6px;',
+    '  background:var(--field); }',
     '.hint { margin:-4px 0 0; color:var(--muted); font-size:11.5px; }',
     '.hint.below { margin:4px 0 0; }',
     '.check { display:flex; align-items:center; gap:6px; cursor:pointer; }',
@@ -368,7 +370,15 @@
     ui.regen.setAttribute('title', 'Yeniden üret');
 
     ui.length = el('input', { type: 'range', id: 'gen-length', step: '1' });
-    ui.lengthValue = el('span', { class: 'value', 'aria-hidden': 'true' });
+    // Kaydırıcının yanındaki sayı aynı zamanda elle yazılabilen giriş kutusudur.
+    ui.lengthValue = el('input', {
+      type: 'number',
+      class: 'value num',
+      id: 'gen-length-num',
+      step: '1',
+      inputmode: 'numeric',
+      'aria-label': 'Uzunluk (sayı)'
+    });
     var lengthRow = el('div', { class: 'field' }, [
       el('label', { for: 'gen-length', text: 'Uzunluk' }),
       ui.length,
@@ -723,7 +733,10 @@
     ui.length.min = pin ? '4' : '8';
     ui.length.max = pin ? '12' : '64';
     ui.length.value = String(pin ? gen.pinLength : gen.length);
-    ui.lengthValue.textContent = ui.length.value;
+    ui.lengthValue.min = ui.length.min;
+    ui.lengthValue.max = ui.length.max;
+    // Yazma sürerken kutudaki metni ezme (ör. "1" yazılıp "12"ye gidilirken).
+    if (Number(ui.lengthValue.value) !== Number(ui.length.value)) ui.lengthValue.value = ui.length.value;
     ui.symbolSet.disabled = !gen.symbols;
   }
 
@@ -755,6 +768,45 @@
       onGenChange(false);
     });
     ui.length.addEventListener('change', saveSettings);
+
+    // Elle yazılan uzunluk: aralıktaki tam sayı yazıldıkça uygulanır; kutudan çıkınca ya da Enter'a basınca
+    // aralığa kıstırılır (rastgele 8–64, PIN 4–12) ve saklanır.
+    function typedLength() {
+      var n = Number(ui.lengthValue.value);
+      return ui.lengthValue.value !== '' && Number.isInteger(n) ? n : null;
+    }
+    function applyLength(n) {
+      if (settings.gen.kind === 'pin') settings.gen.pinLength = n;
+      else settings.gen.length = n;
+    }
+    ui.lengthValue.addEventListener('input', function () {
+      var n = typedLength();
+      var min = Number(ui.length.min);
+      var max = Number(ui.length.max);
+      if (n === null || n < min || n > max) return;
+      if (n === Number(ui.length.value)) return;
+      applyLength(n);
+      onGenChange(false);
+    });
+    ui.lengthValue.addEventListener('change', function () {
+      var min = Number(ui.length.min);
+      var max = Number(ui.length.max);
+      var n = typedLength();
+      n = n === null ? Number(ui.length.value) : Math.min(max, Math.max(min, n));
+      ui.lengthValue.value = String(n);
+      if (n !== Number(ui.length.value)) {
+        applyLength(n);
+        onGenChange(true);
+      } else {
+        saveSettings();
+      }
+    });
+    ui.lengthValue.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        ui.lengthValue.blur(); // change olayını tetikler
+      }
+    });
     ui.digits.addEventListener('change', function () {
       settings.gen.digits = ui.digits.checked;
       onGenChange(true);
