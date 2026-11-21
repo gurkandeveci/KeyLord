@@ -16,6 +16,15 @@
     var sync = areas.sync;
     var local = areas.local;
 
+    // Tüm yazma işlemleri tek bir söz zincirinde sıraya girer; birbirine karışmaz.
+    var chain = Promise.resolve();
+    function serial(fn) {
+      var run = chain.then(fn);
+      chain = run.then(noop, noop);
+      return run;
+    }
+    function noop() {}
+
     async function getOne(area, key) {
       var o = await area.get(key);
       return o && Object.prototype.hasOwnProperty.call(o, key) ? o[key] : null;
@@ -37,14 +46,14 @@
       return getOne(sync, HEADER_KEY);
     }
 
-    async function putHeader(header) {
+    async function putHeader_(header) {
       var o = {};
       o[HEADER_KEY] = header;
       await sync.set(o);
     }
 
     // Önce sync'e dener; hata olursa local'e bekleyen olarak yazar (kayıp olmaz).
-    async function putRecord(id, envelope) {
+    async function putRecord_(id, envelope) {
       var o = {};
       o[REC + id] = envelope;
       try {
@@ -55,12 +64,15 @@
         await local.set(p);
         return { synced: false };
       }
-      await local.remove(PENDING + id);
+      // Senkron başarılı; bekleyen kaydı silmek en iyi çaba (hata yazmayı geçersiz kılmaz).
+      try {
+        await local.remove(PENDING + id);
+      } catch (e) {}
       return { synced: true };
     }
 
     // Bekleyenleri sync'e taşımayı dener; hâlâ bekleyen sayısını döner. Tek tek hatalarda atmaz.
-    async function retryPending() {
+    async function retryPending_() {
       var pend = await byPrefix(local, PENDING);
       var left = 0;
       for (var id in pend) {
@@ -68,10 +80,13 @@
         o[REC + id] = pend[id];
         try {
           await sync.set(o);
-          await local.remove(PENDING + id);
         } catch (e) {
           left++;
+          continue;
         }
+        try {
+          await local.remove(PENDING + id);
+        } catch (e) {}
       }
       return left;
     }
@@ -90,12 +105,12 @@
         });
     }
 
-    async function deleteRecord(id) {
+    async function deleteRecord_(id) {
       await sync.remove(REC + id);
       await local.remove([PENDING + id, SHOT + id]);
     }
 
-    async function putShot(id, envelope) {
+    async function putShot_(id, envelope) {
       var o = {};
       o[SHOT + id] = envelope;
       await local.set(o);
@@ -110,6 +125,12 @@
       var quota = sync.QUOTA_BYTES || DEFAULT_QUOTA;
       return { bytes: bytes, quota: quota, ratio: bytes / quota };
     }
+
+    function putHeader(h) { return serial(function () { return putHeader_(h); }); }
+    function putRecord(id, e) { return serial(function () { return putRecord_(id, e); }); }
+    function retryPending() { return serial(retryPending_); }
+    function deleteRecord(id) { return serial(function () { return deleteRecord_(id); }); }
+    function putShot(id, e) { return serial(function () { return putShot_(id, e); }); }
 
     return {
       getHeader: getHeader,

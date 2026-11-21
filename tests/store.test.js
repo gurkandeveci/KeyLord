@@ -156,4 +156,46 @@
     t.sync.QUOTA_BYTES = undefined;
     assertEqual((await t.store.syncUsage()).quota, 102400);
   });
+
+  test('depo: eşzamanlı retryPending ve yeni putRecord - yeni olan kazanır', async function () {
+    var t = mk();
+    t.sync.failAll = true;
+    await t.store.putRecord('c1', { v: 1, ct: 'old' });
+    t.sync.failAll = false;
+    var p1 = t.store.retryPending();
+    var p2 = t.store.putRecord('c1', { v: 1, ct: 'newer' });
+    await Promise.all([p1, p2]);
+    var list = await t.store.listRecords();
+    assertEqual(list.length, 1);
+    assertEqual(list[0].envelope.ct, 'newer');
+    assertEqual(list[0].synced, true);
+  });
+
+  test('depo: eşzamanlı deleteRecord retryPending ile geri gelmez', async function () {
+    var t = mk();
+    t.sync.failAll = true;
+    await t.store.putRecord('c2', small);
+    t.sync.failAll = false;
+    var p1 = t.store.retryPending();
+    var p2 = t.store.deleteRecord('c2');
+    await Promise.all([p1, p2]);
+    assertEqual((await t.store.listRecords()).length, 0);
+  });
+
+  test('depo: local.remove hatası senkron başarılı yazmayı bozmaz', async function () {
+    var t = mk();
+    t.local.remove = function () { return Promise.reject(new Error('x')); };
+    var r = await t.store.putRecord('c3', small);
+    assertEqual(r.synced, true);
+    assertTrue(!!t.sync.data['rec:c3']);
+  });
+
+  test('depo: sync ve local yazma ikisi de başarısızsa putRecord atar', async function () {
+    var t = mk();
+    t.sync.failAll = true;
+    t.local.failAll = true;
+    var threw = false;
+    try { await t.store.putRecord('c4', small); } catch (e) { threw = true; }
+    assertTrue(threw);
+  });
 })();
