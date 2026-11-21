@@ -64,10 +64,16 @@
         await local.set(p);
         return { synced: false };
       }
-      // Senkron başarılı; bekleyen kaydı silmek en iyi çaba (hata yazmayı geçersiz kılmaz).
+      // Senkron başarılı; eski bekleyen kaydı silinir. Silinemezse, bayat değer kalmasın diye
+      // bekleyeni sync'e yazılanla aynı zarfla ezeriz (sonraki retry idempotent olur).
+      // Ezme de başarısız olursa hata yayılır; bayat bekleyen sessizce bırakılmaz.
       try {
         await local.remove(PENDING + id);
-      } catch (e) {}
+      } catch (e) {
+        var same = {};
+        same[PENDING + id] = envelope;
+        await local.set(same);
+      }
       return { synced: true };
     }
 
@@ -84,9 +90,12 @@
           left++;
           continue;
         }
+        // Bekleyen değer zaten sync'e yazılanla aynı; silinemezse hâlâ bekleyen sayılır (atmaz).
         try {
           await local.remove(PENDING + id);
-        } catch (e) {}
+        } catch (e) {
+          left++;
+        }
       }
       return left;
     }

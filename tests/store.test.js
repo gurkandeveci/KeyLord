@@ -198,4 +198,28 @@
     try { await t.store.putRecord('c4', small); } catch (e) { threw = true; }
     assertTrue(threw);
   });
+
+  test('depo: remove başarısızsa bayat pending yeni zarfla ezilir', async function () {
+    var t = mk();
+    t.sync.failAll = true;
+    await t.store.putRecord('c5', { v: 1, ct: 'old' });
+    t.sync.failAll = false;
+    t.local.remove = function () { return Promise.reject(new Error('x')); };
+    var r = await t.store.putRecord('c5', { v: 1, ct: 'newer' });
+    assertEqual(r.synced, true);
+    var list = await t.store.listRecords();
+    assertEqual(list.length, 1);
+    assertEqual(list[0].envelope.ct, 'newer');
+    await t.store.retryPending();
+    assertEqual(t.sync.data['rec:c5'].ct, 'newer');
+  });
+
+  test('depo: remove ve ezme ikisi de başarısızsa putRecord atar', async function () {
+    var t = mk();
+    t.local.remove = function () { return Promise.reject(new Error('x')); };
+    t.local.failAll = true;
+    var threw = false;
+    try { await t.store.putRecord('c6', small); } catch (e) { threw = true; }
+    assertTrue(threw);
+  });
 })();
