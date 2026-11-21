@@ -140,7 +140,10 @@
   var bg = {
     failPut: false,
     failShot: false,
+    tabActive: true, // false: kayıt sekmesi artık etkin değil (shot:capture reddedilir)
     putDelay: 0,
+    shotDelay: 0, // shot:capture yanıtını geciktirir (görüntü alınırken aç/kapat senaryosu)
+    capturing: false,
     opened: 0,
     captures: 0,
     messages: [], // yalnızca { type, id } – kayıt içeriği (şifre) tutulmaz
@@ -177,6 +180,10 @@
         if (typeof msg.id !== 'string' || !msg.id || bg.failShot) return { ok: false, error: 'capture-failed' };
         header = await store.getHeader();
         if (!header) return { ok: false, error: 'no-vault' };
+        if (!bg.tabActive) return { ok: false, error: 'capture-failed' }; // background: chrome.tabs.get(...).active
+        bg.capturing = true; // çağrı anında kutunun gizli olduğunu doğrulamak için
+        if (bg.shotDelay) await new Promise(function (r) { setTimeout(r, bg.shotDelay); });
+        bg.capturing = false;
         await store.putShot(msg.id, await g.KeyLordVaultCrypto.encryptBytes(header, new Uint8Array(FAKE_JPEG)));
         bg.captures++;
         return { ok: true };
@@ -228,6 +235,14 @@
     // record:put yanıtını ms kadar geciktirir (kayıt yazılırken kutuyu kapatma senaryosu); 0 kapatır.
     delayRecordPut: function (ms) {
       bg.putDelay = Math.max(0, Number(ms) || 0);
+    },
+    // shot:capture yanıtını ms kadar geciktirir; 0 kapatır.
+    delayShot: function (ms) {
+      bg.shotDelay = Math.max(0, Number(ms) || 0);
+    },
+    // false: kayıt sekmesi etkin değilmiş gibi shot:capture reddedilir.
+    setTabActive: function (on) {
+      bg.tabActive = !!on;
     },
     // true: shot:capture { ok:false } döner.
     failShot: function (on) {

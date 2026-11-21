@@ -72,6 +72,8 @@
     '  border-radius:6px; background:var(--field); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;',
     '  font-size:12.5px; }',
     'textarea.masked, input.masked { -webkit-text-security:disc; }',
+    // Üretilen şifre seçilip kopyalanamaz/sürüklenemez: panoya yalnızca kayıtlı "Kopyala" yoluyla gider.
+    'input.genpw { -webkit-user-select:none; user-select:none; }',
     'textarea:focus, select:focus, button:focus-visible, input:focus-visible { outline:2px solid var(--accent);',
     '  outline-offset:1px; }',
     'fieldset { margin:0; padding:8px 10px 10px; border:1px solid var(--line); border-radius:6px;',
@@ -133,6 +135,7 @@
   // Şifre sekmesi durumu. Düz şifre ve düz kayıt yalnızca bu şifre gösterildiği sürece bellekte tutulur.
   var current = null; // { password, record }
   var pwBusy = false; // kayıt yazımı / gönderim / görüntü sürüyor
+  var capturing = false; // ekran görüntüsü için kutu gizliyken true: aç/kapat bu sırada yok sayılır
   var vaultState = 'unknown'; // 'unknown' | 'yes' | 'no'
   var focusBeforeOpen = null; // kutu odak almadan önce sayfada odaklı öğe (alan doldurma için)
   // Süren gönder/kopyala işlemi: { aborted }. hide() iptal eder; eski işlemin sonucu yeni şifrenin altına yazılmaz.
@@ -345,7 +348,7 @@
     // Şifre yalnızca bu salt okunur alanda (kapalı shadow root içinde) görünür; varsayılan gizli.
     ui.pw = el('input', {
       type: 'text',
-      class: 'masked',
+      class: 'genpw masked',
       readonly: '',
       'aria-label': 'Üretilen şifre',
       spellcheck: 'false',
@@ -728,6 +731,16 @@
     });
 
     ui.regen.addEventListener('click', regenerate);
+    // Ctrl+C / kes / sürükle geçmişi atlamasın: tarayıcının kopyalaması engellenir, kayıtlı kopyalama çalışır.
+    ['copy', 'cut'].forEach(function (type) {
+      ui.pw.addEventListener(type, function (ev) {
+        ev.preventDefault();
+        copyPassword();
+      });
+    });
+    ui.pw.addEventListener('dragstart', function (ev) {
+      ev.preventDefault();
+    });
     ui.reveal.addEventListener('click', function () {
       setReveal(ui.pw.classList.contains('masked'));
     });
@@ -882,6 +895,7 @@
   function capture(cur) {
     var wasVisible = host.style.display !== 'none';
     if (wasVisible) host.style.display = 'none';
+    capturing = true;
     var id = cur.record.id;
     return nextFrame()
       .then(nextFrame)
@@ -890,6 +904,7 @@
       })
       .then(
         function (res) {
+          capturing = false;
           if (wasVisible) host.style.display = '';
           if (!res || !res.ok) return ' Ekran görüntüsü alınamadı.';
           cur.record = Object.assign({}, cur.record, { hasScreenshot: true });
@@ -898,6 +913,7 @@
           });
         },
         function () {
+          capturing = false;
           if (wasVisible) host.style.display = '';
           return ' Ekran görüntüsü alınamadı.';
         }
@@ -1058,6 +1074,7 @@
   // ---------- Aç / kapat ----------
 
   function show() {
+    if (capturing) return; // görüntü alınırken kutu görünmemeli
     host.style.display = '';
     detect();
     if (settings.tab === 'password') {
@@ -1083,6 +1100,9 @@
   }
 
   function toggle() {
+    // Görüntü alınırken kutu geçici olarak gizlidir; araç çubuğu/kısayol onu açıp görüntüye sokmasın
+    // (ya da kapatıp gönderim sonucunu kaybettirmesin).
+    if (capturing) return Promise.resolve();
     // Kutu odak almadan önce: alan doldurma kullanıcının tıkladığı şifre alanını hedef alsın.
     if (!host || host.style.display === 'none') focusBeforeOpen = document.activeElement;
     if (!host) {

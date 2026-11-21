@@ -83,6 +83,8 @@ async function handleRecordPut(msg) {
   }
   const header = await store.getHeader();
   if (!header) return { ok: false, error: 'no-vault' };
+  // Eşitlenen başlık güvenilmez: biçimi bozuksa kayıt yazılmaz ('bad-header'), gönderim de yapılmaz.
+  KeyLordVaultCrypto.validateHeader(header);
   const env = await KeyLordVaultCrypto.encryptJson(header, msg.record);
   const res = await store.putRecord(msg.id, env);
   try { await store.retryPending(); } catch (e) { /* bekleyenler sonra yeniden denenir */ }
@@ -94,6 +96,11 @@ async function handleShot(msg, sender) {
     if (!sender.tab || typeof msg.id !== 'string' || !msg.id) throw new Error('bad-request');
     const header = await store.getHeader();
     if (!header) return { ok: false, error: 'no-vault' };
+    KeyLordVaultCrypto.validateHeader(header);
+    // captureVisibleTab pencerenin etkin sekmesini çeker; kullanıcı bu arada sekme değiştirdiyse
+    // başka bir sayfanın görüntüsü bu kayda girmesin.
+    const t = await chrome.tabs.get(sender.tab.id);
+    if (!t || !t.active) return { ok: false, error: 'capture-failed' };
     const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'jpeg', quality: 70 });
     const bin = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
     const bytes = new Uint8Array(bin.length);
