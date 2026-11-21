@@ -163,8 +163,9 @@ Bilgisayar değiştirirken, eşitleme kapalıysa veya eklenti kimliği değişti
   tutulur. Şifre üreticiden gönderilen şifreler ise yalnızca şifreli olarak kasaya yazılır; düz metin olarak
   depolanmaz, eşitlenmez, yedeğe girmez. Eklenti yalnızca simgesine bastığınız sekmeye erişir (`activeTab`);
   tüm sitelere erişim izni istemez.
-- **Sürüm bilgisi ve GitHub**: Kutunun altında GitHub'daki son sürüm (Latest Release) ve commit numarası
-  gösterilir (örn. `Latest Release: v1.1.0 · dfe3a61`); kurulu sürüm eskiyse "Güncelleme var" yazar. Bunun için
+- **Sürüm bilgisi ve GitHub**: Kutunun altında kurulu sürüm ve commit numarası gösterilir (örn.
+  `v1.1.1 · 46d3c11`). GitHub'da daha yeni bir sürüm varsa yanına `Yeni sürüm: v1.2.0` yazar (tıklayınca sürüm
+  sayfası açılır); yoksa başka bir şey yazmaz. GitHub'a ulaşılamazsa yalnızca kurulu sürüm görünür. Bunun için
   eklenti, en çok saatte bir, `api.github.com`'a herkese açık sürüm bilgisini sorar. Bu istekte sizin
   verilerinizden hiçbir şey gönderilmez; GitHub yalnızca isteğin geldiği IP adresini görür. Bunun dışında
   hiçbir şey eklentinin dışındaki bir sunucuya gönderilmez.
@@ -191,7 +192,7 @@ bulunur, web sayfaları bunlara erişemez.
 | `src/records.js` | Kayıt modeli ve birleştirme |
 | `src/vault-crypto.js`, `src/vault-session.js` | Kasa şifrelemesi (ECDH P-256 + AES-GCM, PBKDF2) ve 15 dakikalık oturum |
 | `src/store.js`, `src/backup.js` | Depolama (`storage.sync` / `storage.local`) ve yedek dosyası |
-| `src/release.js` | GitHub'daki son sürüm ve commit numarası (1 saat önbellekli) |
+| `src/release.js` | Kurulu sürümün commit numarası ve GitHub'daki yeni sürüm kontrolü (1 saat önbellekli) |
 | `vault.html`, `src/vault-page.js`, `src/vault-page.css` | Kasa sayfası |
 
 ## İzinler

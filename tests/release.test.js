@@ -25,10 +25,13 @@
   }
 
   var API = 'https://api.github.com/repos/gurkandeveci/KeyLord';
-  function okRoutes(tag, sha) {
+  function okRoutes(tag, sha, installedTag, installedSha) {
     var routes = {};
     routes[API + '/releases/latest'] = { status: 200, body: { tag_name: tag, html_url: 'https://github.com/gurkandeveci/KeyLord/releases/tag/' + tag } };
     routes[API + '/commits/' + encodeURIComponent(tag)] = { status: 200, body: { sha: sha } };
+    if (installedTag && installedTag !== tag) {
+      routes[API + '/commits/' + encodeURIComponent(installedTag)] = { status: 200, body: { sha: installedSha } };
+    }
     return routes;
   }
 
@@ -44,12 +47,35 @@
   test('sürüm: getLatest etiket, 7 haneli commit ve sayfa adresini döner', async function () {
     var calls = [];
     var res = await R.getLatest({ fetch: fakeFetch(okRoutes('v1.1.0', 'dfe3a61abcdef0123'), calls), cache: memCache(), now: 1000, installed: '1.1.0' });
-    assertEqual(res, { ok: true, tag: 'v1.1.0', sha: 'dfe3a61', url: 'https://github.com/gurkandeveci/KeyLord/releases/tag/v1.1.0', installed: '1.1.0', newer: false });
+    assertEqual(res, { ok: true, tag: 'v1.1.0', sha: 'dfe3a61', url: 'https://github.com/gurkandeveci/KeyLord/releases/tag/v1.1.0', installed: '1.1.0', installedSha: 'dfe3a61', newer: false });
     assertEqual(calls.length, 2);
   });
 
+  test('sürüm: kurulu sürüm farklıysa onun commit numarası da gelir', async function () {
+    var res = await R.getLatest({ fetch: fakeFetch(okRoutes('v1.2.0', 'bbbbbbb22', 'v1.1.1', '46d3c11ff'), []), cache: memCache(), now: 1, installed: '1.1.1' });
+    assertEqual(res.installedSha, '46d3c11');
+    assertEqual(res.newer, true);
+  });
+
+  test('sürüm: kurulu sürümün etiketi GitHub\'da yoksa installedSha null, sonuç yine ok', async function () {
+    var res = await R.getLatest({ fetch: fakeFetch(okRoutes('v1.2.0', 'bbbbbbb22'), []), cache: memCache(), now: 1, installed: '1.1.9' });
+    assertEqual(res.ok, true);
+    assertEqual(res.installedSha, null);
+  });
+
+  test('sürüm: kurulu sürüm değişince önbellek kullanılmaz', async function () {
+    var cache = memCache();
+    var calls = [];
+    await R.getLatest({ fetch: fakeFetch(okRoutes('v1.2.0', 'bbbbbbb22', 'v1.1.1', '46d3c11ff'), calls), cache: cache, now: 0, installed: '1.1.1' });
+    var n = calls.length;
+    var res = await R.getLatest({ fetch: fakeFetch(okRoutes('v1.2.0', 'bbbbbbb22'), calls), cache: cache, now: 10, installed: '1.2.0' });
+    assertTrue(calls.length > n);
+    assertEqual(res.installedSha, 'bbbbbbb');
+    assertEqual(res.newer, false);
+  });
+
   test('sürüm: kurulu sürüm eskiyse newer true', async function () {
-    var res = await R.getLatest({ fetch: fakeFetch(okRoutes('v1.2.0', 'aaaaaaa1'), []), cache: memCache(), now: 1, installed: '1.1.0' });
+    var res = await R.getLatest({ fetch: fakeFetch(okRoutes('v1.2.0', 'aaaaaaa1', 'v1.1.0', 'ccccccc3'), []), cache: memCache(), now: 1, installed: '1.1.0' });
     assertTrue(res.newer);
   });
 

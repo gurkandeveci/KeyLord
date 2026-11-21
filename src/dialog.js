@@ -122,7 +122,8 @@
     '.release { margin-top:2px; color:var(--muted); font-size:11px; text-align:center;',
     '  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }',
     '.release a { color:inherit; }',
-    '.release .update { color:var(--accent); font-weight:600; }',
+    '.release .update { color:var(--accent); font-weight:600; text-decoration:none; }',
+    '.release a.update:hover { text-decoration:underline; }',
     '[hidden] { display:none !important; }'
   ].join('\n');
 
@@ -435,26 +436,35 @@
     ]);
   }
 
-  // GitHub'daki son sürümü (etiket · commit) gösterir; kurulu sürüm eskiyse "Güncelleme var" der.
-  // Bilgiyi arka plan getirir (1 saat önbellekli); sayfaya yalnızca bu herkese açık bilgi yazılır.
+  // Kurulu sürümü gösterir (ör. "v1.1.1 · 46d3c11"). Arka plan GitHub'a sorup (1 saat önbellekli) kurulu
+  // sürümün commit numarasını ekler; GitHub'da daha yeni bir sürüm varsa yanına "Yeni sürüm: vX" yazar.
+  // Kontrol başarısızsa yalnızca kurulu sürüm kalır, başka bir şey yazılmaz.
+  function installedVersion() {
+    try {
+      return chrome.runtime.getManifest().version;
+    } catch (err) {
+      return '';
+    }
+  }
+
   function loadRelease() {
+    var installed = installedVersion();
+    var base = installed ? 'v' + installed : '';
+    ui.release.textContent = base;
     bg({ type: 'release:latest' }).then(function (res) {
-      if (!ui.release) return;
+      if (!ui.release || !res || !res.ok) return;
       ui.release.textContent = '';
-      if (!res || !res.ok) {
-        ui.release.textContent =
-          'Latest Release: alınamadı' + (res && res.installed ? ' · kurulu v' + res.installed : '');
-        return;
-      }
-      // Bağlantı yalnızca github.com adresine gidebilir.
-      var safe = /^https:\/\/github\.com\//.test(String(res.url || ''));
-      var link = safe
-        ? el('a', { href: res.url, target: '_blank', rel: 'noopener noreferrer', title: 'GitHub sürüm sayfası' })
-        : el('span');
-      link.textContent = 'Latest Release: ' + res.tag + ' · ' + res.sha;
-      ui.release.appendChild(link);
+      var version = 'v' + (installed || res.installed);
+      ui.release.appendChild(document.createTextNode(version + (res.installedSha ? ' · ' + res.installedSha : '')));
       if (res.newer) {
-        ui.release.appendChild(el('div', { class: 'update', text: 'Güncelleme var (kurulu: v' + res.installed + ')' }));
+        // Bağlantı yalnızca github.com adresine gidebilir.
+        var safe = /^https:\/\/github\.com\//.test(String(res.url || ''));
+        var label = 'Yeni sürüm: ' + res.tag;
+        var link = safe
+          ? el('a', { class: 'update', href: res.url, target: '_blank', rel: 'noopener noreferrer', title: 'GitHub sürüm sayfası', text: label })
+          : el('span', { class: 'update', text: label });
+        ui.release.appendChild(document.createTextNode(' · '));
+        ui.release.appendChild(link);
       }
     });
   }
@@ -495,7 +505,7 @@
       // Durum satırlarından ayrı bir öğe: durum metni ne olursa olsun hep onların altında kalır.
       el('div', { class: 'foot' }, [
         el('div', { class: 'credit', text: 'developed by Gürkan Deveci' }),
-        (ui.release = el('div', { class: 'release', text: 'Latest Release: …' }))
+        (ui.release = el('div', { class: 'release' }))
       ])
     ]);
 

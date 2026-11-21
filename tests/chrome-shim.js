@@ -114,6 +114,9 @@
     runtime: {
       id: 'shim',
       lastError: undefined,
+      getManifest: function () {
+        return { version: bg.installed };
+      },
       getURL: function (p) {
         return new URL(String(p).replace(/^\//, ''), g.location.href).href;
       },

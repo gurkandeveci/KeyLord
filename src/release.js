@@ -35,12 +35,30 @@
     });
   }
 
-  async function fetchFresh(fetchFn) {
+  async function commitOf(fetchFn, tag) {
+    var commit = await getJson(fetchFn, API + '/commits/' + encodeURIComponent(tag));
+    if (!commit || typeof commit.sha !== 'string' || commit.sha.length < 7) throw new Error('bad-commit');
+    return commit.sha.slice(0, 7);
+  }
+
+  // Son sürüm + kurulu sürümün (etiketi "v" + sürüm) commit numarası. Kurulu sürümün etiketi
+  // GitHub'da yoksa (ör. yayınlanmamış geliştirme sürümü) installedSha null olur.
+  async function fetchFresh(fetchFn, installed) {
     var rel = await getJson(fetchFn, API + '/releases/latest');
     if (!rel || typeof rel.tag_name !== 'string' || !rel.tag_name) throw new Error('bad-release');
-    var commit = await getJson(fetchFn, API + '/commits/' + encodeURIComponent(rel.tag_name));
-    if (!commit || typeof commit.sha !== 'string' || commit.sha.length < 7) throw new Error('bad-commit');
-    return { tag: rel.tag_name, sha: commit.sha.slice(0, 7), url: String(rel.html_url || '') };
+    var sha = await commitOf(fetchFn, rel.tag_name);
+    var installedTag = 'v' + installed;
+    var installedSha = null;
+    if (parts(installedTag) && parts(rel.tag_name) && !isNewer(rel.tag_name, installed) && !isNewer('v' + installed, rel.tag_name)) {
+      installedSha = sha; // kurulu sürüm = son sürüm
+    } else {
+      try {
+        installedSha = await commitOf(fetchFn, installedTag);
+      } catch (e) {
+        installedSha = null;
+      }
+    }
+    return { tag: rel.tag_name, sha: sha, url: String(rel.html_url || ''), installed: installed, installedSha: installedSha };
   }
 
   function result(info, installed) {
@@ -50,6 +68,7 @@
       sha: info.sha,
       url: info.url,
       installed: installed,
+      installedSha: info.installedSha === undefined ? null : info.installedSha,
       newer: isNewer(info.tag, installed)
     };
   }
@@ -61,11 +80,13 @@
       var got = await o.cache.get(CACHE_KEY);
       cached = got && got[CACHE_KEY];
     } catch (e) {}
-    if (cached && cached.info && o.now - cached.at >= 0 && o.now - cached.at < TTL_MS) {
+    // Önbellek yalnızca aynı kurulu sürüm için geçerlidir (eklenti güncellenince yeniden sorulur).
+    var sameInstalled = cached && cached.info && cached.info.installed === o.installed;
+    if (sameInstalled && o.now - cached.at >= 0 && o.now - cached.at < TTL_MS) {
       return result(cached.info, o.installed);
     }
     try {
-      var info = await fetchFresh(o.fetch);
+      var info = await fetchFresh(o.fetch, o.installed);
       try {
         var item = {};
         item[CACHE_KEY] = { at: o.now, info: info };
@@ -74,7 +95,7 @@
       return result(info, o.installed);
     } catch (err) {
       // Ağ yoksa ya da GitHub sınırı aşıldıysa eski bilgi varsa onu göster.
-      if (cached && cached.info) return result(cached.info, o.installed);
+      if (sameInstalled) return result(cached.info, o.installed);
       return { ok: false, installed: o.installed };
     }
   }
