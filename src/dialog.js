@@ -45,6 +45,8 @@
     '.panel * { box-sizing:border-box; font:inherit; color:inherit; }',
     '.title { display:flex; align-items:center; justify-content:space-between; padding:8px 8px 8px 12px;',
     '  border-bottom:1px solid var(--line); cursor:move; user-select:none; font-weight:600; }',
+    '.heading { display:flex; flex-direction:column; min-width:0; }',
+    '.origin { font-weight:400; font-size:11.5px; color:var(--muted); overflow-wrap:anywhere; }',
     '.close { border:0; background:transparent; width:26px; height:26px; border-radius:6px; cursor:pointer;',
     '  font-size:18px; line-height:1; color:var(--muted); }',
     '.close:hover { background:var(--field); color:var(--fg); }',
@@ -88,6 +90,8 @@
   var sending = null; // { id, clearOnDone }
   var sequence = 0;
   var detectTimer = null;
+  // Konsol bulunup bağlı olduğu doğrulanmadan metin sayfaya hiç iletilmez.
+  var ready = false;
 
   // ---------- Ayarların saklanması ----------
 
@@ -151,13 +155,19 @@
   function build() {
     host = el('div', { id: 'keylord-host' });
     host.style.cssText = 'position:fixed; top:16px; right:16px; z-index:2147483647;';
-    var root = host.attachShadow({ mode: 'open' });
+    // closed: sayfanın kendi scriptleri host.shadowRoot ile kutunun içine (parolaya) ulaşamaz.
+    var root = host.attachShadow({ mode: 'closed' });
     var sheet = new CSSStyleSheet();
     sheet.replaceSync(CSS);
     root.adoptedStyleSheets = [sheet];
 
     ui.close = el('button', { type: 'button', class: 'close', 'aria-label': 'Kapat', title: 'Kapat', text: '×' });
-    ui.title = el('div', { class: 'title' }, [el('span', { text: 'KeyLord' }), ui.close]);
+    // Kutunun hangi sayfada (çerçevede) açıldığını göster: parola yanlış adrese yazılmasın.
+    ui.origin = el('div', { class: 'origin', text: location.host || location.origin });
+    ui.title = el('div', { class: 'title' }, [
+      el('div', { class: 'heading' }, [el('span', { text: 'KeyLord' }), ui.origin]),
+      ui.close
+    ]);
 
     ui.text = el('textarea', {
       id: 'text',
@@ -280,12 +290,19 @@
     ui.status.className = 'status' + (kind ? ' ' + kind : '');
   }
 
+  // Gönder ve tek tuş düğmeleri yalnızca konsol bulunup bağlıyken ve gönderim yokken açıktır.
   function setBusy(busy) {
-    ui.send.disabled = busy;
+    var off = busy || !ready;
+    ui.send.disabled = off;
     ui.stop.disabled = !busy;
     ui.keys.forEach(function (b) {
-      b.disabled = busy;
+      b.disabled = off;
     });
+  }
+
+  function setReady(value) {
+    ready = value;
+    setBusy(!!sending);
   }
 
   function wireEvents() {
@@ -348,6 +365,7 @@
 
   function detect() {
     setStatus('Konsol aranıyor…');
+    setReady(false);
     clearTimeout(detectTimer);
     detectTimer = setTimeout(function () {
       setStatus('Konsol bileşenine ulaşılamadı. Sayfayı yenileyip kutuyu yeniden açın.', 'error');
@@ -358,6 +376,7 @@
   function onStatus(message) {
     clearTimeout(detectTimer);
     if (sending) return;
+    setReady(!!message.consoles && !!message.connected);
     if (!message.consoles) setStatus(ERRORS['no-console'], 'error');
     else if (!message.connected) setStatus(ERRORS['not-connected'], 'error');
     else setStatus('Konsol bulundu, gönderime hazır.', 'ok');
@@ -400,6 +419,11 @@
 
   function start(strokes, clearOnDone) {
     if (sending) return;
+    if (!ready) {
+      setStatus('Konsol hazır değil; hiçbir şey gönderilmedi.', 'error');
+      detect();
+      return;
+    }
     var speed = SPEEDS[settings.speed] || SPEEDS.normal;
     sending = { id: 'ks' + ++sequence, clearOnDone: clearOnDone };
     setBusy(true);

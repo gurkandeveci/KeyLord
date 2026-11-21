@@ -42,8 +42,13 @@
 
 <script>
   var query = new URLSearchParams(location.search);
-  var JQ = query.get('jq') || '3.7.1';
-  var UI = query.get('ui') || '1.13.2';
+  // Yalnızca sürüm numarası kabul et: adresten gelen değer sayfaya HTML olarak yazılıyor.
+  function version(name, fallback) {
+    var value = query.get(name);
+    return value && /^\d+\.\d+\.\d+$/.test(value) ? value : fallback;
+  }
+  var JQ = version('jq', '3.7.1');
+  var UI = version('ui', '1.13.2');
   document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/' + JQ + '/jquery.min.js"><\/script>');
   document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/' + UI + '/jquery-ui.min.js"><\/script>');
 </script>
