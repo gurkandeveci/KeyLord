@@ -5,6 +5,8 @@ tuş vuruşu olarak ileten Chrome eklentisi. Web konsolunda yapıştırma çalı
 karmaşık parolaları elle yazma derdini ortadan kaldırır. Ayrıca rastgele şifre üretir, gönderdiği her şifreyi
 ana parolayla korunan şifreli bir kasaya kaydeder. Windows ve macOS'ta Chrome ile çalışır.
 
+https://chromewebstore.google.com/detail/keylord-%E2%80%93-send-keys-to-co/lnkkedffjgecpfahibmnlhimadopejcd
+
 ## Kurulum
 
 1. Bu klasörü bilgisayarınıza kopyalayın (zip olarak aldıysanız bir klasöre açın). **Kalıcı bir yer seçin**
