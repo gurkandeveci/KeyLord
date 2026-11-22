@@ -9,20 +9,8 @@ https://chromewebstore.google.com/detail/keylord-%E2%80%93-send-keys-to-co/lnkke
 
 ## Kurulum
 
-1. Bu klasörü bilgisayarınıza kopyalayın (zip olarak aldıysanız bir klasöre açın). **Kalıcı bir yer seçin**
-   (örn. `~/Applications/KeyLord` veya `C:\Araclar\KeyLord`); İndirilenler, masaüstü gibi temizlenen yerleri ya da
-   zip'in önizleme penceresini kullanmayın. Chrome açılışta klasörü bulamazsa eklentiyi listeden kaldırır ve her
-   açılışta yeniden yüklemeniz gerekir. Yükledikten sonra klasörü taşımayın ve silmeyin; güncellerken yeni zip'i
-   aynı klasörün üzerine açın.
-2. Chrome'da `chrome://extensions` adresini açın.
-3. Sağ üstteki **Geliştirici modu** anahtarını açın.
-4. **Paketlenmemiş öğe yükle**'ye basıp bu klasörü (içinde `manifest.json` olan) seçin.
-5. Araç çubuğundaki yapboz simgesinden **KeyLord**'i sabitleyin.
-
-**1.0'dan 1.1'e güncelleme:** 1.1 sürümü `manifest.json`'a sabit kimlik (`key`) ekler, bu yüzden eklenti
-kimliği değişir. Eski klasörü yerinde güncellemek yetmez: `chrome://extensions`'da eski KeyLord'u **kaldırın**
-ve yeni klasörü yukarıdaki gibi **yeniden yükleyin**. Kimlik değiştiği için konsol ayarları (klavye düzeni,
-hız vb.) bir kez sıfırlanır; yeniden seçin. Kısayolu da gerekirse yeniden atayın.
+Chrome Web Store : 
+https://chromewebstore.google.com/detail/keylord-%E2%80%93-send-keys-to-co/lnkkedffjgecpfahibmnlhimadopejcd
 
 Kısayol varsayılan olarak **Alt+Shift+K**'dır (macOS'ta Option+Shift+K). Çalışmıyorsa veya değiştirmek
 isterseniz `chrome://extensions/shortcuts` sayfasından atayın.
