@@ -9,7 +9,8 @@ https://chromewebstore.google.com/detail/keylord-%E2%80%93-send-keys-to-co/lnkke
 
 ## Kurulum
 
-Chrome Web Store : 
+Chrome Web Store linki ile : 
+
 https://chromewebstore.google.com/detail/keylord-%E2%80%93-send-keys-to-co/lnkkedffjgecpfahibmnlhimadopejcd
 
 Kısayol varsayılan olarak **Alt+Shift+K**'dır (macOS'ta Option+Shift+K). Çalışmıyorsa veya değiştirmek
